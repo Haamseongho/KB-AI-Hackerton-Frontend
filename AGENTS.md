@@ -35,6 +35,8 @@ Backend principle:
 - Worker = long-running STT/LLM processing
 - LLM and Transcribe must not be called directly from Flutter
 - Flutter uploads audio to S3 only through backend-generated presigned URLs
+- `POST /meetings/{meeting_id}/start` creates an internal worker job and returns `job_id`
+- Local backend development requires two processes: FastAPI server and `worker.py`
 
 Base URL must be environment-specific and must not be hardcoded across widgets.
 
@@ -42,6 +44,25 @@ Recommended local examples:
 - Android emulator: `http://10.0.2.2:8000`
 - iOS simulator: `http://localhost:8000`
 - physical device: use the host machine LAN IP, for example `http://192.168.x.x:8000`
+
+Backend local run:
+
+```bash
+# Terminal 1: API server
+cd ../KB-AI-Hackerton-Backend/server
+uv run uvicorn app.main:app --reload
+
+# Terminal 2: Worker
+cd ../KB-AI-Hackerton-Backend/server
+uv run python worker.py
+```
+
+Docker Compose can run both processes together:
+
+```bash
+cd ../KB-AI-Hackerton-Backend/server
+docker compose up --build
+```
 
 ---
 
@@ -105,6 +126,7 @@ Expected response:
 {
   "id": "meeting-uuid",
   "title": "주간 회의",
+  "meeting_type": "unknown",
   "status": "created",
   "audio_s3_key": null,
   "transcript_s3_key": null,
@@ -178,6 +200,7 @@ Expected response:
 {
   "id": "meeting-uuid",
   "title": "주간 회의",
+  "meeting_type": "small",
   "status": "transcribing",
   "audio_s3_key": "kb-ai-voicedoc/audio/...",
   "transcript_s3_key": null,
@@ -214,12 +237,22 @@ Expected response:
   "status": "completed",
   "title": "회의록 제목",
   "summary": "회의 요약 내용",
+  "decisions": ["결정 사항"],
+  "action_items": [
+    {
+      "owner": "담당자",
+      "task": "할 일",
+      "due_date": "미정"
+    }
+  ],
   "minutes_json_s3_key": "kb-ai-voicedoc/minutes/{meeting_id}/minutes.json",
   "minutes_markdown_s3_key": "kb-ai-voicedoc/minutes/{meeting_id}/minutes.md"
 }
 ```
 
 If status is not completed, keep showing the processing state instead of assuming the result is ready.
+
+The backend currently returns result metadata at all statuses. `decisions` and `action_items` are available after the worker stores structured LLM output.
 
 ### Get Job
 
@@ -234,8 +267,14 @@ Expected response:
 {
   "id": "job-uuid",
   "meeting_id": "meeting-uuid",
+  "job_type": "meeting_pipeline",
   "status": "running",
+  "aws_job_name": "kb-ai-voicedoc-meeting-uuid",
+  "attempt_count": 1,
   "error_message": null,
+  "locked_at": "2026-05-14T00:00:00Z",
+  "started_at": "2026-05-14T00:00:00Z",
+  "completed_at": null,
   "created_at": "2026-05-11T00:00:00Z",
   "updated_at": "2026-05-11T00:00:00Z"
 }
@@ -315,6 +354,8 @@ Rules:
 - Poll with a controlled interval, for example 2-5 seconds.
 - Stop polling when status is `completed` or `failed`.
 - Do not start duplicate polling timers for the same meeting.
+- Prefer polling `GET /jobs/{job_id}` after `/start`; use `GET /meetings/{meeting_id}` when restoring state after app restart.
+- Treat HTTP `409` from `/start` as "job already in progress" and resume polling instead of creating a new meeting.
 
 ---
 
@@ -326,6 +367,7 @@ Flutter must handle:
 - expired presigned URL
 - meeting not found
 - job already in progress
+- worker not running locally, where status stays `queued`
 - worker failure with `error_message`
 - timeout while polling
 
@@ -365,6 +407,7 @@ flutter test
 ```
 
 Backend local run is managed in `../KB-AI-Hackerton-Backend/server`.
+For an end-to-end local backend flow, run both `uvicorn` and `worker.py`.
 
 ---
 
