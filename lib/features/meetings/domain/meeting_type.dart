@@ -1,5 +1,5 @@
 enum MeetingType {
-  general('general', 'General'),
+  general('unknown', 'General'),
   oneOnOne('one_on_one', '1:1'),
   small('small', 'Small'),
   medium('medium', 'Medium'),

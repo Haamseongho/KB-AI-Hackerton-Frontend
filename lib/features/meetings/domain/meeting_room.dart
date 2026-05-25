@@ -12,6 +12,7 @@ class MeetingRoom {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.backendId,
     this.notes,
     this.recording,
     this.summary,
@@ -24,6 +25,7 @@ class MeetingRoom {
 
   final String localId;
   final String meetingId;
+  final String? backendId;
   final String title;
   final MeetingType meetingType;
   final MeetingStatus status;
@@ -41,6 +43,7 @@ class MeetingRoom {
   MeetingRoom copyWith({
     String? localId,
     String? meetingId,
+    String? backendId,
     String? title,
     MeetingType? meetingType,
     MeetingStatus? status,
@@ -59,6 +62,7 @@ class MeetingRoom {
     return MeetingRoom(
       localId: localId ?? this.localId,
       meetingId: meetingId ?? this.meetingId,
+      backendId: backendId ?? this.backendId,
       title: title ?? this.title,
       meetingType: meetingType ?? this.meetingType,
       status: status ?? this.status,

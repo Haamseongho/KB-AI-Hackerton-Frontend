@@ -4,6 +4,25 @@
 
 This document tracks the Flutter migration from batch S3 upload/transcribe flow to realtime meeting-room STT.
 
+## Current Backend Compatibility
+
+As of this frontend slice, `../KB-AI-Hackerton-Backend` still exposes the batch MVP contract:
+- `POST /meetings`
+- `POST /meetings/{meeting_id}/upload-url`
+- `POST /meetings/{meeting_id}/start`
+- `GET /meetings/{meeting_id}`
+- `GET /meetings/{meeting_id}/result`
+- `GET /jobs/{job_id}`
+
+The backend currently does not expose a FastAPI WebSocket route for realtime Transcribe Streaming.
+
+Frontend implications:
+- Keep realtime STT UI and WebSocket client behind a service boundary until backend WebSocket is added.
+- REST calls must use backend UUID `id`, not the local display ID such as `MTG-20260521-006`.
+- `meeting_type` values sent to backend must be `one_on_one`, `small`, `medium`, or `unknown`.
+- Current `/upload-url` accepts one audio asset only: `file_extension` and `content_type`.
+- Current summary/minutes start endpoint is `/meetings/{meeting_id}/start`, not `/summarize`.
+
 Current first implementation slice:
 - Split the previous single-file app into `app`, `core`, and `features` folders.
 - Add typed meeting, recording, transcript, and WebSocket state models.

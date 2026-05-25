@@ -9,41 +9,26 @@ class MeetingApi {
   Future<Map<String, dynamic>> createMeetingRoom({
     required String title,
     required MeetingType meetingType,
-    required String storageType,
     String? notes,
   }) {
     return _client.postJson(
       '/meetings',
-      body: {
-        'title': title,
-        'meeting_type': meetingType.value,
-        'notes': notes,
-        'storage_metadata': {'type': storageType},
-      },
+      body: {'title': title, 'meeting_type': meetingType.value},
     );
   }
 
-  Future<Map<String, dynamic>> requestSummary(String meetingId) {
-    return _client.postJson('/meetings/$meetingId/summarize');
+  Future<Map<String, dynamic>> startMeetingPipeline(String backendMeetingId) {
+    return _client.postJson('/meetings/$backendMeetingId/start');
   }
 
-  Future<Map<String, dynamic>> requestUploadUrls(String meetingId) {
+  Future<Map<String, dynamic>> requestAudioUploadUrl(
+    String backendMeetingId, {
+    String fileExtension = 'm4a',
+    String contentType = 'audio/mp4',
+  }) {
     return _client.postJson(
-      '/meetings/$meetingId/upload-url',
-      body: {
-        'assets': [
-          {
-            'asset_type': 'recording',
-            'file_extension': 'm4a',
-            'content_type': 'audio/mp4',
-          },
-          {
-            'asset_type': 'transcript',
-            'file_extension': 'txt',
-            'content_type': 'text/plain',
-          },
-        ],
-      },
+      '/meetings/$backendMeetingId/upload-url',
+      body: {'file_extension': fileExtension, 'content_type': contentType},
     );
   }
 }

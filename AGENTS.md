@@ -86,6 +86,15 @@ Environment config should use build flavors, `--dart-define`, or a local ignored
 Backend local run is managed in `../KB-AI-Hackerton-Backend/server`.
 Run the FastAPI server and any required worker process for end-to-end local testing.
 
+Current backend compatibility:
+- The backend currently implements the batch MVP REST flow, not realtime WebSocket STT.
+- There is no implemented FastAPI WebSocket route for realtime Transcribe Streaming yet.
+- Flutter should keep realtime STT behind a service boundary until the backend WebSocket is added.
+- REST calls must use the backend UUID `id`; display IDs like `MTG-20260521-006` are local/UI identifiers unless backend adds them.
+- Current backend `meeting_type` values are `one_on_one`, `small`, `medium`, and `unknown`.
+- Current `/meetings/{meeting_id}/upload-url` accepts one audio asset with `file_extension` and `content_type`.
+- Current summary/minutes pipeline starts through `POST /meetings/{meeting_id}/start`.
+
 ---
 
 ## Core App Responsibilities

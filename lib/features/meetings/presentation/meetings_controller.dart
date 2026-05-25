@@ -74,9 +74,20 @@ class MeetingsController extends ChangeNotifier {
           .createMeetingRoom(
             title: room.title,
             meetingType: meetingType,
-            storageType: storageType,
             notes: notes,
           )
+          .then((json) async {
+            final backendId = json['id'];
+            if (backendId is! String) return <String, dynamic>{};
+            final updated = room.copyWith(backendId: backendId);
+            await _repository.saveRoom(updated);
+            rooms = await _repository.listRooms(query: query);
+            if (selectedRoom?.localId == updated.localId) {
+              selectedRoom = updated;
+            }
+            notifyListeners();
+            return json;
+          })
           .catchError((Object error) {
             statusMessage = 'Local room created. REST create failed.';
             errorMessage = error.toString();
@@ -173,10 +184,16 @@ class MeetingsController extends ChangeNotifier {
     if (room == null) return;
 
     try {
+      final backendMeetingId = room.backendId;
+      if (backendMeetingId == null) {
+        throw const AppException(
+          'Backend meeting id is missing. Create the room while the API server is reachable before upload.',
+        );
+      }
       statusMessage = 'Requesting presigned upload URLs.';
       errorMessage = null;
       notifyListeners();
-      await _api.requestUploadUrls(room.meetingId);
+      await _api.requestAudioUploadUrl(backendMeetingId);
       final updated = room.copyWith(
         status: MeetingStatus.uploaded,
         updatedAt: DateTime.now(),
