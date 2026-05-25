@@ -31,4 +31,14 @@ class MeetingApi {
       body: {'file_extension': fileExtension, 'content_type': contentType},
     );
   }
+
+  Future<Map<String, dynamic>> createMinutesFromRealtime(
+    String backendMeetingId, {
+    List<Map<String, String?>>? segments,
+  }) {
+    return _client.postJson(
+      '/meetings/$backendMeetingId/minutes-from-realtime',
+      body: segments == null ? null : {'segments': segments},
+    );
+  }
 }

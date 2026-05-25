@@ -154,7 +154,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
         return AlertDialog(
           title: const Text('회의록으로 정리하시겠습니까?'),
           content: Text(
-            '녹음 파일과 transcript를 REST API로 S3 업로드 요청합니다.\n\nRoom: ${room?.title ?? '-'}\nmeeting_id: ${room?.meetingId ?? '-'}',
+            '완료된 실시간 transcript를 기반으로 회의록 생성을 요청합니다.\n생성된 회의록 파일은 백엔드가 S3에 저장합니다.\n\nRoom: ${room?.title ?? '-'}\nmeeting_id: ${room?.meetingId ?? '-'}',
           ),
           actions: [
             TextButton(

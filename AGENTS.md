@@ -87,9 +87,11 @@ Backend local run is managed in `../KB-AI-Hackerton-Backend/server`.
 Run the FastAPI server and any required worker process for end-to-end local testing.
 
 Current backend compatibility:
-- The backend currently implements the batch MVP REST flow, not realtime WebSocket STT.
-- There is no implemented FastAPI WebSocket route for realtime Transcribe Streaming yet.
-- Flutter should keep realtime STT behind a service boundary until the backend WebSocket is added.
+- The backend now implements both the batch REST flow and realtime WebSocket STT.
+- Realtime endpoint: `WS /ws/meetings/{meeting_id}/transcribe`.
+- Realtime start/resume event uses `media_encoding`, `sample_rate`, `language_code`, and optional `vocabulary_name`.
+- Realtime transcript events are `transcript.partial`, `transcript.final`, `status`, and `error`.
+- Realtime final segments can be summarized through `POST /meetings/{meeting_id}/minutes-from-realtime`.
 - REST calls must use the backend UUID `id`; display IDs like `MTG-20260521-006` are local/UI identifiers unless backend adds them.
 - Current backend `meeting_type` values are `one_on_one`, `small`, `medium`, and `unknown`.
 - Current `/meetings/{meeting_id}/upload-url` accepts one audio asset with `file_extension` and `content_type`.
@@ -237,12 +239,10 @@ Client events:
 ```json
 {
   "type": "start",
-  "meeting_id": "MTG-20260521-002",
   "sample_rate": 16000,
-  "encoding": "pcm_s16le",
-  "channels": 1,
-  "chunk_duration_ms": 100,
-  "language_code": "ko-KR"
+  "media_encoding": "pcm",
+  "language_code": "ko-KR",
+  "vocabulary_name": null
 }
 ```
 
@@ -274,29 +274,27 @@ Server events:
 
 ```json
 {
-  "type": "transcription_status",
-  "status": "transcribing",
-  "message": "Backend status: transcribing"
+  "type": "status",
+  "status": "transcribing"
 }
 ```
 
 ```json
 {
-  "type": "partial_transcript",
-  "text": "오늘 회의에서는",
-  "speaker": null,
-  "started_at_ms": 1240,
-  "ended_at_ms": 2180
+  "type": "transcript.partial",
+  "meeting_id": "meeting-uuid",
+  "transcript_text": "오늘 회의에서는",
+  "is_final": false
 }
 ```
 
 ```json
 {
-  "type": "final_transcript",
-  "text": "오늘 회의에서는 실시간 STT 구조를 확정합니다.",
-  "speaker": "Speaker 1",
-  "started_at_ms": 1240,
-  "ended_at_ms": 4920
+  "type": "transcript.final",
+  "meeting_id": "meeting-uuid",
+  "transcript_text": "오늘 회의에서는 실시간 STT 구조를 확정합니다.",
+  "is_final": true,
+  "segment_seq": 1
 }
 ```
 
@@ -390,9 +388,9 @@ Request:
 }
 ```
 
-### Start Summary Job
+### Create Minutes From Realtime
 
-`POST /meetings/{meeting_id}/summarize`
+`POST /meetings/{meeting_id}/minutes-from-realtime`
 
 Purpose:
 - Request LangGraph / Bedrock summary after recording is finished and transcript is available.
@@ -402,8 +400,17 @@ Expected response:
 ```json
 {
   "meeting_id": "meeting-uuid",
-  "job_id": "job-uuid",
-  "status": "queued"
+  "status": "completed",
+  "title": "회의록 제목",
+  "topic": "회의 주제",
+  "summary": "회의 요약",
+  "speaker_intentions": [],
+  "key_conversations": [],
+  "decisions": [],
+  "action_items": [],
+  "minutes_json_s3_key": "kb-ai-voicedoc/minutes/{meeting_id}/minutes.json",
+  "minutes_markdown_s3_key": "kb-ai-voicedoc/minutes/{meeting_id}/minutes.md",
+  "pdf_s3_key": "kb-ai-voicedoc/pdf/{meeting_id}/minutes.pdf"
 }
 ```
 
@@ -415,16 +422,20 @@ Purpose:
 - Fetch meeting metadata and restore state.
 
 Meeting status values:
+- `created`
+- `upload_url_issued`
+- `uploaded`
+- `queued`
+- `orchestration_starting`
+- `orchestration_started`
 - `ready`
 - `recording`
 - `paused`
 - `transcribing`
 - `transcription_completed`
-- `summary_queued`
 - `summarizing`
 - `completed`
 - `failed`
-- `uploaded`
 
 ### Get Meeting Result
 

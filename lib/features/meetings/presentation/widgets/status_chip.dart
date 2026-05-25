@@ -12,6 +12,11 @@ class StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = switch (status) {
       MeetingStatus.ready => Colors.amber.shade700,
+      MeetingStatus.created ||
+      MeetingStatus.uploadUrlIssued ||
+      MeetingStatus.queued => Colors.amber.shade700,
+      MeetingStatus.orchestrationStarting ||
+      MeetingStatus.orchestrationStarted => Colors.indigo.shade700,
       MeetingStatus.recording => Colors.red.shade600,
       MeetingStatus.paused => Colors.deepOrange.shade700,
       MeetingStatus.transcribing => Colors.green.shade700,

@@ -6,7 +6,9 @@ This document tracks the Flutter migration from batch S3 upload/transcribe flow 
 
 ## Current Backend Compatibility
 
-As of this frontend slice, `../KB-AI-Hackerton-Backend` still exposes the batch MVP contract:
+As of 2026-05-26, `../KB-AI-Hackerton-Backend` exposes both batch and realtime contracts.
+
+Batch REST contract:
 - `POST /meetings`
 - `POST /meetings/{meeting_id}/upload-url`
 - `POST /meetings/{meeting_id}/start`
@@ -14,14 +16,34 @@ As of this frontend slice, `../KB-AI-Hackerton-Backend` still exposes the batch 
 - `GET /meetings/{meeting_id}/result`
 - `GET /jobs/{job_id}`
 
-The backend currently does not expose a FastAPI WebSocket route for realtime Transcribe Streaming.
+Realtime contract:
+- `WS /ws/meetings/{meeting_id}/transcribe`
+- `POST /meetings/{meeting_id}/minutes-from-realtime`
+
+WebSocket client start/resume payload:
+
+```json
+{
+  "type": "start",
+  "language_code": "ko-KR",
+  "media_encoding": "pcm",
+  "sample_rate": 16000
+}
+```
+
+WebSocket server events:
+- `status`
+- `transcript.partial`
+- `transcript.final`
+- `error`
 
 Frontend implications:
-- Keep realtime STT UI and WebSocket client behind a service boundary until backend WebSocket is added.
+- Keep realtime STT UI and WebSocket client behind a service boundary while actual recorder PCM streaming is wired.
 - REST calls must use backend UUID `id`, not the local display ID such as `MTG-20260521-006`.
 - `meeting_type` values sent to backend must be `one_on_one`, `small`, `medium`, or `unknown`.
 - Current `/upload-url` accepts one audio asset only: `file_extension` and `content_type`.
-- Current summary/minutes start endpoint is `/meetings/{meeting_id}/start`, not `/summarize`.
+- Batch summary/minutes starts through `/meetings/{meeting_id}/start`.
+- Realtime summary/minutes starts through `/meetings/{meeting_id}/minutes-from-realtime`.
 
 Current first implementation slice:
 - Split the previous single-file app into `app`, `core`, and `features` folders.

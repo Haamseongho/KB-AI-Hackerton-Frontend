@@ -190,15 +190,28 @@ class MeetingsController extends ChangeNotifier {
           'Backend meeting id is missing. Create the room while the API server is reachable before upload.',
         );
       }
-      statusMessage = 'Requesting presigned upload URLs.';
+      statusMessage = 'Requesting realtime minutes generation.';
       errorMessage = null;
       notifyListeners();
-      await _api.requestAudioUploadUrl(backendMeetingId);
+      final segments = room.segments.isEmpty
+          ? null
+          : room.segments
+                .map(
+                  (segment) => {
+                    'speaker_label': segment.speaker,
+                    'transcript_text': segment.text,
+                  },
+                )
+                .toList(growable: false);
+      await _api.createMinutesFromRealtime(
+        backendMeetingId,
+        segments: segments,
+      );
       final updated = room.copyWith(
-        status: MeetingStatus.uploaded,
+        status: MeetingStatus.completed,
         updatedAt: DateTime.now(),
       );
-      await _saveAndSelect(updated, 'Upload API call completed.');
+      await _saveAndSelect(updated, 'Realtime minutes generation completed.');
     } catch (error) {
       errorMessage = _userMessage(error);
       notifyListeners();
@@ -234,6 +247,12 @@ class MeetingsController extends ChangeNotifier {
   String _messageFor(MeetingStatus status) {
     return switch (status) {
       MeetingStatus.ready => 'Ready. Press Record to stream PCM audio.',
+      MeetingStatus.created => 'Meeting is created.',
+      MeetingStatus.uploadUrlIssued => 'Upload URL has been issued.',
+      MeetingStatus.uploaded => 'Uploaded to S3.',
+      MeetingStatus.queued => 'Meeting job is queued.',
+      MeetingStatus.orchestrationStarting => 'Workflow is starting.',
+      MeetingStatus.orchestrationStarted => 'Workflow has started.',
       MeetingStatus.recording => 'Backend status: transcribing',
       MeetingStatus.paused => 'Transcription is paused.',
       MeetingStatus.transcribing => 'Backend status: transcribing',
@@ -241,7 +260,6 @@ class MeetingsController extends ChangeNotifier {
       MeetingStatus.summaryQueued => 'Summary job is queued.',
       MeetingStatus.summarizing => 'Summarizing transcript.',
       MeetingStatus.completed => 'Meeting minutes are ready.',
-      MeetingStatus.uploaded => 'Uploaded to S3.',
       MeetingStatus.failed => 'Processing failed.',
     };
   }

@@ -26,7 +26,7 @@ class InMemoryMeetingRepository implements MeetingRepository {
             filePath: '/local/REALTIME_TEST_20260521.m4a',
             contentType: 'audio/mp4',
             durationMs: 59000,
-            realtimeAudioEncoding: 'pcm_s16le',
+            realtimeAudioEncoding: 'pcm',
             realtimeSampleRate: 16000,
             realtimeChannels: 1,
           ),

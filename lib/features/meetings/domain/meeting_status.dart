@@ -1,5 +1,11 @@
 enum MeetingStatus {
   ready('ready', 'Ready'),
+  created('created', 'Created'),
+  uploadUrlIssued('upload_url_issued', 'Upload URL issued'),
+  uploaded('uploaded', 'Uploaded'),
+  queued('queued', 'Queued'),
+  orchestrationStarting('orchestration_starting', 'Starting'),
+  orchestrationStarted('orchestration_started', 'Started'),
   recording('recording', 'Recording'),
   paused('paused', 'Paused'),
   transcribing('transcribing', 'Transcribing'),
@@ -7,7 +13,6 @@ enum MeetingStatus {
   summaryQueued('summary_queued', 'Summary queued'),
   summarizing('summarizing', 'Summarizing'),
   completed('completed', 'Completed'),
-  uploaded('uploaded', 'Uploaded'),
   failed('failed', 'Failed');
 
   const MeetingStatus(this.value, this.label);

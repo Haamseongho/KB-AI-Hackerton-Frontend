@@ -24,8 +24,9 @@ class TranscriptionSocketClient {
     int sampleRate = 16000,
     int channels = 1,
     int chunkDurationMs = 100,
-    String encoding = 'pcm_s16le',
+    String mediaEncoding = 'pcm',
     String languageCode = 'ko-KR',
+    String? vocabularyName,
   }) async {
     await close();
     final uri = Uri.parse('$_wsBaseUrl/ws/meetings/$meetingId/transcribe');
@@ -48,10 +49,9 @@ class TranscriptionSocketClient {
       'type': 'start',
       'meeting_id': meetingId,
       'sample_rate': sampleRate,
-      'encoding': encoding,
-      'channels': channels,
-      'chunk_duration_ms': chunkDurationMs,
+      'media_encoding': mediaEncoding,
       'language_code': languageCode,
+      'vocabulary_name': ?vocabularyName,
     });
   }
 
@@ -96,24 +96,30 @@ class TranscriptionSocketClient {
 
     final type = decoded['type'] as String?;
     switch (type) {
-      case 'transcription_status':
+      case 'status':
         _events.add(
           TranscriptionStatusEvent(
             status: decoded['status'] as String? ?? 'unknown',
-            message: decoded['message'] as String? ?? 'Status updated',
+            message:
+                decoded['message'] as String? ??
+                'Backend status: ${decoded['status'] ?? 'unknown'}',
           ),
         );
-      case 'partial_transcript':
+      case 'transcript.partial':
         _events.add(
-          PartialTranscriptEvent(text: decoded['text'] as String? ?? ''),
+          PartialTranscriptEvent(
+            text: decoded['transcript_text'] as String? ?? '',
+          ),
         );
-      case 'final_transcript':
+      case 'transcript.final':
         _events.add(
           FinalTranscriptEvent(
             segment: TranscriptSegment(
-              id: DateTime.now().microsecondsSinceEpoch.toString(),
-              text: decoded['text'] as String? ?? '',
-              speaker: decoded['speaker'] as String?,
+              id:
+                  (decoded['segment_seq'] as int?)?.toString() ??
+                  DateTime.now().microsecondsSinceEpoch.toString(),
+              text: decoded['transcript_text'] as String? ?? '',
+              speaker: 'Speaker 1',
               startedAt: Duration(
                 milliseconds: decoded['started_at_ms'] as int? ?? 0,
               ),
