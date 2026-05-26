@@ -257,7 +257,7 @@ class MeetingsController extends ChangeNotifier {
       final backendMeetingId = await _ensureBackendMeeting(room);
       final generating = room.copyWith(
         backendId: backendMeetingId,
-        status: MeetingStatus.generatingMinutes,
+        status: MeetingStatus.uploading,
         updatedAt: DateTime.now(),
       );
       await _saveAndSelect(
@@ -281,7 +281,7 @@ class MeetingsController extends ChangeNotifier {
         segments: segments,
       );
       final updated = generating.copyWith(
-        status: MeetingStatus.fromJson(result['status'] as String?),
+        status: _statusAfterRealtimeMinutes(result),
         title: result['title'] as String?,
         summary: result['summary'] as String?,
         minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
@@ -356,6 +356,16 @@ class MeetingsController extends ChangeNotifier {
     } finally {
       _backendCreateFutures.remove(room.localId);
     }
+  }
+
+  /// 목업 테스트 UI와 맞추기 위해 회의록 S3 산출물이 있으면 로컬 상태를 uploaded로 봅니다.
+  MeetingStatus _statusAfterRealtimeMinutes(Map<String, dynamic> result) {
+    final hasMinutesArtifact =
+        result['minutes_json_s3_key'] != null ||
+        result['minutes_markdown_s3_key'] != null ||
+        result['pdf_s3_key'] != null;
+    if (hasMinutesArtifact) return MeetingStatus.uploaded;
+    return MeetingStatus.fromJson(result['status'] as String?);
   }
 
   /// WebSocket 이벤트 스트림을 controller 상태 변경으로 변환합니다.
@@ -505,6 +515,7 @@ class MeetingsController extends ChangeNotifier {
       MeetingStatus.ready => 'Ready. Press Record to stream PCM audio.',
       MeetingStatus.created => 'Meeting is created.',
       MeetingStatus.uploadUrlIssued => 'Upload URL has been issued.',
+      MeetingStatus.uploading => 'Preparing minutes upload.',
       MeetingStatus.uploaded => 'Uploaded to S3.',
       MeetingStatus.queued => 'Meeting job is queued.',
       MeetingStatus.orchestrationStarting => 'Workflow is starting.',

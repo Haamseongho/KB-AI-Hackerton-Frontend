@@ -15,6 +15,7 @@ class StatusChip extends StatelessWidget {
       MeetingStatus.created ||
       MeetingStatus.uploadUrlIssued ||
       MeetingStatus.queued => Colors.amber.shade700,
+      MeetingStatus.uploading ||
       MeetingStatus.orchestrationStarting ||
       MeetingStatus.orchestrationStarted => Colors.indigo.shade700,
       MeetingStatus.recording => Colors.red.shade600,

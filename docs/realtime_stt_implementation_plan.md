@@ -6,7 +6,7 @@ This document tracks the Flutter migration from batch S3 upload/transcribe flow 
 
 ## Current Backend Compatibility
 
-As of 2026-05-26, `../KB-AI-Hackerton-Backend` exposes both batch and realtime contracts.
+As of 2026-05-26, `../KB-AI-Hackerton-Backend` `dev` exposes both batch and realtime contracts.
 
 Batch REST contract:
 - `POST /meetings`
@@ -57,6 +57,7 @@ Implemented slices:
 - Pause/stop the realtime stream by closing audio and WebSocket resources.
 - Generate minutes through `POST /meetings/{meeting_id}/minutes-from-realtime`.
 - Store returned minutes metadata: `minutes_json_s3_key`, `minutes_markdown_s3_key`, and `pdf_s3_key`.
+- Match the backend mobile mockup's local minutes flow state: `uploading` while requesting minutes and `uploaded` after S3 minutes artifacts are returned.
 - Save final transcript text to a local txt file when leaving a room.
 - Best-effort save an encoded `m4a` recording file for playback/upload while realtime PCM streaming is active.
 

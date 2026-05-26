@@ -2,6 +2,7 @@ enum MeetingStatus {
   ready('ready', 'Ready'),
   created('created', 'Created'),
   uploadUrlIssued('upload_url_issued', 'Upload URL issued'),
+  uploading('uploading', 'Uploading'),
   uploaded('uploaded', 'Uploaded'),
   queued('queued', 'Queued'),
   orchestrationStarting('orchestration_starting', 'Starting'),
