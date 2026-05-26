@@ -61,6 +61,24 @@ Out of scope for this first slice:
 - Real S3 upload completion flow.
 - Real LangGraph / Bedrock summary result rendering.
 
+## Mobile Mockup Parity Check
+
+Reference:
+`../KB-AI-Hackerton-Backend/frontend/voice-doc-mobile-mockup/`
+
+The mockup now contains executable test logic, not only static UI. Flutter should mirror these behavior points:
+
+- Create the backend meeting before realtime streaming starts. If a local room has no backend UUID, call `POST /meetings` and store response `id` as `backendId`.
+- Open `WS /ws/meetings/{backendId}/transcribe` with the backend UUID, not the display meeting ID.
+- Send WebSocket start payload with only the current backend schema fields: `type`, `language_code`, `media_encoding`, and `sample_rate`.
+- Capture microphone audio as 16 kHz mono signed 16-bit little-endian PCM. The web mockup uses `AudioContext`, downsampling, and `DataView.setInt16(..., true)`.
+- Flutter equivalent should use `record` streaming with `RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1, echoCancel: true, noiseSuppress: true, autoGain: true)` if supported on the target platform.
+- Pause behavior in the mockup sends `pause`, closes the socket, and starts a new realtime stream when Record is pressed again.
+- Stop/save behavior sends `stop`, closes audio resources, and saves transcript text locally.
+- Store realtime minutes result metadata returned from `/minutes-from-realtime`: `minutes_json_s3_key`, `minutes_markdown_s3_key`, and `pdf_s3_key`.
+- Keep a debug-only test event path for UI validation while real microphone streaming is incomplete.
+- Add a local `uploading` or `generating` UI state so minutes generation is visually distinct from completed/uploaded.
+
 ## Next Implementation Slices
 
 1. Recorder integration
