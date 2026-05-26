@@ -21,6 +21,7 @@ class MeetingRoom {
     this.autoScroll = true,
     this.streamSessionId,
     this.streamSegmentCount = 0,
+    this.transcriptFilePath,
     this.minutesJsonS3Key,
     this.minutesMarkdownS3Key,
     this.pdfS3Key,
@@ -43,6 +44,7 @@ class MeetingRoom {
   final bool autoScroll;
   final String? streamSessionId;
   final int streamSegmentCount;
+  final String? transcriptFilePath;
   final String? minutesJsonS3Key;
   final String? minutesMarkdownS3Key;
   final String? pdfS3Key;
@@ -66,6 +68,7 @@ class MeetingRoom {
     bool? autoScroll,
     String? streamSessionId,
     int? streamSegmentCount,
+    String? transcriptFilePath,
     String? minutesJsonS3Key,
     String? minutesMarkdownS3Key,
     String? pdfS3Key,
@@ -90,6 +93,7 @@ class MeetingRoom {
       autoScroll: autoScroll ?? this.autoScroll,
       streamSessionId: streamSessionId ?? this.streamSessionId,
       streamSegmentCount: streamSegmentCount ?? this.streamSegmentCount,
+      transcriptFilePath: transcriptFilePath ?? this.transcriptFilePath,
       minutesJsonS3Key: minutesJsonS3Key ?? this.minutesJsonS3Key,
       minutesMarkdownS3Key: minutesMarkdownS3Key ?? this.minutesMarkdownS3Key,
       pdfS3Key: pdfS3Key ?? this.pdfS3Key,

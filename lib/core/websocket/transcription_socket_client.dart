@@ -8,6 +8,10 @@ import '../../features/meetings/domain/transcript_segment.dart';
 import '../../features/meetings/domain/transcription_event.dart';
 import '../config/app_config.dart';
 
+/// FastAPI realtime STT WebSocket과 통신하는 클라이언트입니다.
+///
+/// UI나 controller가 raw JSON을 직접 다루지 않도록 backend 이벤트를
+/// `TranscriptionEvent` 타입으로 변환해서 외부에 전달합니다.
 class TranscriptionSocketClient {
   TranscriptionSocketClient({String? wsBaseUrl})
     : _wsBaseUrl = wsBaseUrl ?? AppConfig.wsBaseUrl;
@@ -17,8 +21,10 @@ class TranscriptionSocketClient {
   StreamSubscription<dynamic>? _subscription;
   final _events = StreamController<TranscriptionEvent>.broadcast();
 
+  /// status, partial transcript, final transcript, error 이벤트를 발행합니다.
   Stream<TranscriptionEvent> get events => _events.stream;
 
+  /// backend UUID 기준 meeting WebSocket에 연결하고 start 이벤트를 보냅니다.
   Future<void> connect({
     required String meetingId,
     int sampleRate = 16000,
@@ -55,23 +61,28 @@ class TranscriptionSocketClient {
     });
   }
 
+  /// 녹음 서비스에서 받은 PCM 16-bit little-endian chunk를 순서대로 전송합니다.
   void sendPcmChunk(Uint8List bytes) {
     _channel?.sink.add(bytes);
   }
 
+  /// backend에 pause 제어 이벤트를 보냅니다.
   void pause() {
     _sendJson({'type': 'pause'});
   }
 
+  /// backend에 resume 제어 이벤트를 보냅니다.
   void resume() {
     _sendJson({'type': 'resume'});
   }
 
+  /// backend에 stop 이벤트를 보낸 뒤 WebSocket을 닫습니다.
   Future<void> stop() async {
     _sendJson({'type': 'stop'});
     await close();
   }
 
+  /// WebSocket 구독과 sink를 정리합니다.
   Future<void> close() async {
     await _subscription?.cancel();
     _subscription = null;
@@ -79,15 +90,18 @@ class TranscriptionSocketClient {
     _channel = null;
   }
 
+  /// 앱 종료나 controller dispose 시 내부 리소스를 해제합니다.
   void dispose() {
     unawaited(close());
     unawaited(_events.close());
   }
 
+  /// Dart map을 JSON 문자열로 변환해 WebSocket에 전송합니다.
   void _sendJson(Map<String, dynamic> json) {
     _channel?.sink.add(jsonEncode(json));
   }
 
+  /// backend JSON 이벤트를 앱 내부 typed event로 변환합니다.
   void _handleMessage(dynamic message) {
     if (message is! String) return;
 

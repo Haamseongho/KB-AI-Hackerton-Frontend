@@ -6,6 +6,7 @@ import '../../../core/errors/app_exception.dart';
 import '../../../core/permissions/microphone_permission_service.dart';
 import '../../../core/websocket/transcription_socket_client.dart';
 import '../../recordings/data/realtime_audio_streaming_service.dart';
+import '../../transcription/data/transcript_file_service.dart';
 import '../../meetings/data/meeting_api.dart';
 import '../domain/meeting_repository.dart';
 import '../domain/meeting_room.dart';
@@ -15,6 +16,11 @@ import '../domain/recording_asset.dart';
 import '../domain/transcript_segment.dart';
 import '../domain/transcription_event.dart';
 
+/// 회의방 화면의 녹음, 실시간 STT, 회의록 생성 흐름을 조율하는 컨트롤러입니다.
+///
+/// Widget은 화면 렌더링과 사용자 입력만 담당하고, backend meeting 생성,
+/// WebSocket 연결, PCM chunk 전송, transcript 누적, 파일 저장, 회의록 생성 요청은
+/// 이 컨트롤러가 서비스 계층에 위임합니다.
 class MeetingsController extends ChangeNotifier {
   MeetingsController({
     required MeetingRepository repository,
@@ -22,19 +28,23 @@ class MeetingsController extends ChangeNotifier {
     MicrophonePermissionService? permissionService,
     TranscriptionSocketClient? transcriptionSocketClient,
     RealtimeAudioStreamingService? audioStreamingService,
+    TranscriptFileService? transcriptFileService,
   }) : _repository = repository,
        _api = api,
        _permissionService = permissionService ?? MicrophonePermissionService(),
        _transcriptionSocketClient =
            transcriptionSocketClient ?? TranscriptionSocketClient(),
        _audioStreamingService =
-           audioStreamingService ?? RealtimeAudioStreamingService();
+           audioStreamingService ?? RealtimeAudioStreamingService(),
+       _transcriptFileService =
+           transcriptFileService ?? TranscriptFileService();
 
   final MeetingRepository _repository;
   final MeetingApi _api;
   final MicrophonePermissionService _permissionService;
   final TranscriptionSocketClient _transcriptionSocketClient;
   final RealtimeAudioStreamingService _audioStreamingService;
+  final TranscriptFileService _transcriptFileService;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<TranscriptionEvent>? _transcriptionSubscription;
   DateTime? _streamStartedAt;
@@ -48,6 +58,7 @@ class MeetingsController extends ChangeNotifier {
   bool isLoading = false;
   bool debugMode = true;
 
+  /// 저장된 회의방 목록을 현재 검색어 기준으로 다시 불러옵니다.
   Future<void> loadRooms() async {
     isLoading = true;
     notifyListeners();
@@ -56,12 +67,14 @@ class MeetingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 회의방 제목 또는 meeting_id 검색어를 적용합니다.
   Future<void> search(String value) async {
     query = value;
     rooms = await _repository.listRooms(query: query);
     notifyListeners();
   }
 
+  /// 로컬 회의방을 만들고, 가능한 경우 즉시 backend meeting도 생성합니다.
   Future<void> createRoom({
     required String title,
     required MeetingType meetingType,
@@ -95,6 +108,7 @@ class MeetingsController extends ChangeNotifier {
     );
   }
 
+  /// 목록이나 상세 화면에서 선택한 회의방을 현재 작업 대상으로 설정합니다.
   void selectRoom(MeetingRoom room) {
     selectedRoom = room;
     statusMessage = _messageFor(room.status);
@@ -102,6 +116,7 @@ class MeetingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 마이크 권한을 확인한 뒤 backend WebSocket에 PCM 스트림을 전송합니다.
   Future<void> startRecording() async {
     final room = selectedRoom;
     if (room == null) return;
@@ -153,6 +168,7 @@ class MeetingsController extends ChangeNotifier {
     await _saveAndSelect(updated, 'Sending PCM audio to FastAPI.');
   }
 
+  /// 현재 WebSocket/오디오 스트림을 닫고 transcript 누적 상태는 보존합니다.
   Future<void> pauseRecording() async {
     final room = selectedRoom;
     if (room == null) return;
@@ -167,17 +183,25 @@ class MeetingsController extends ChangeNotifier {
     await _saveAndSelect(updated, 'Paused. Press Record to open a new stream.');
   }
 
+  /// 회의방을 나가며 realtime stream을 종료하고 transcript 파일을 로컬에 저장합니다.
   Future<void> leaveRoom() async {
     final room = selectedRoom;
     if (room == null) return;
 
     await _stopRealtimeStream(controlType: 'stop');
 
+    final transcriptFilePath = await _transcriptFileService.saveTranscript(
+      meetingId: room.meetingId,
+      title: room.title,
+      segments: room.segments,
+    );
+
     final updated = room.copyWith(
       status: room.segments.isEmpty
           ? MeetingStatus.ready
           : MeetingStatus.transcriptionCompleted,
       recording: room.recording ?? _recordingAssetFor(room),
+      transcriptFilePath: transcriptFilePath,
       updatedAt: DateTime.now(),
       clearPartialTranscript: true,
     );
@@ -187,6 +211,7 @@ class MeetingsController extends ChangeNotifier {
     );
   }
 
+  /// 백엔드 연동 전에도 UI 흐름을 검증할 수 있도록 final transcript를 추가합니다.
   Future<void> appendDebugTranscript() async {
     final room = selectedRoom;
     if (room == null) return;
@@ -212,6 +237,7 @@ class MeetingsController extends ChangeNotifier {
     await _saveAndSelect(updated, 'Final transcript received.');
   }
 
+  /// 최종 transcript segment를 backend `/minutes-from-realtime`로 보내 회의록을 생성합니다.
   Future<void> generateMinutesFromRealtime() async {
     final room = selectedRoom;
     if (room == null) return;
@@ -260,8 +286,10 @@ class MeetingsController extends ChangeNotifier {
     }
   }
 
+  /// 기존 UI 콜백과의 호환을 위한 별칭입니다. 실제 동작은 회의록 생성입니다.
   Future<void> requestUpload() => generateMinutesFromRealtime();
 
+  /// transcript 패널의 자동 스크롤 상태를 저장합니다.
   void toggleAutoScroll(bool value) {
     final room = selectedRoom;
     if (room == null) return;
@@ -271,6 +299,7 @@ class MeetingsController extends ChangeNotifier {
     unawaited(_repository.saveRoom(updated));
   }
 
+  /// 로컬 저장소에 room을 저장하고 현재 선택 상태와 목록을 동기화합니다.
   Future<void> _saveAndSelect(MeetingRoom room, String message) async {
     final saved = await _repository.saveRoom(room);
     selectedRoom = saved;
@@ -280,6 +309,7 @@ class MeetingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// WebSocket/회의록 API가 사용할 backend UUID를 보장합니다.
   Future<String> _ensureBackendMeeting(MeetingRoom room) async {
     if (room.backendId != null) return room.backendId!;
     final pending = _backendCreateFutures[room.localId];
@@ -317,6 +347,7 @@ class MeetingsController extends ChangeNotifier {
     }
   }
 
+  /// WebSocket 이벤트 스트림을 controller 상태 변경으로 변환합니다.
   void _listenToTranscriptionEvents() {
     unawaited(_transcriptionSubscription?.cancel());
     _transcriptionSubscription = _transcriptionSocketClient.events.listen(
@@ -324,6 +355,7 @@ class MeetingsController extends ChangeNotifier {
     );
   }
 
+  /// backend에서 받은 status/partial/final/error 이벤트를 UI 모델에 반영합니다.
   void _handleTranscriptionEvent(TranscriptionEvent event) {
     final room = selectedRoom;
     if (room == null) return;
@@ -352,6 +384,7 @@ class MeetingsController extends ChangeNotifier {
     }
   }
 
+  /// backend가 timestamp를 주지 않는 경우 앱 기준 경과 시간을 보완합니다.
   TranscriptSegment _withElapsedFallback(TranscriptSegment segment) {
     if (segment.startedAt != Duration.zero ||
         segment.endedAt != Duration.zero) {
@@ -371,6 +404,7 @@ class MeetingsController extends ChangeNotifier {
     );
   }
 
+  /// 현재 MVP에서 녹음 스트림 메타데이터를 로컬 recording asset 형태로 남깁니다.
   RecordingAsset _recordingAssetFor(MeetingRoom room) {
     return RecordingAsset(
       fileName: '${room.meetingId}_realtime_stream.pcm',
@@ -383,6 +417,7 @@ class MeetingsController extends ChangeNotifier {
     );
   }
 
+  /// transcript segment 중 가장 마지막 종료 시각을 회의 길이로 사용합니다.
   Duration _transcriptDuration(MeetingRoom room) {
     if (room.segments.isEmpty) return Duration.zero;
     return room.segments
@@ -390,6 +425,7 @@ class MeetingsController extends ChangeNotifier {
         .reduce((a, b) => a > b ? a : b);
   }
 
+  /// 오디오 스트림과 WebSocket을 같은 생명주기로 정리합니다.
   Future<void> _stopRealtimeStream({required String controlType}) async {
     await _audioSubscription?.cancel();
     _audioSubscription = null;
@@ -406,6 +442,7 @@ class MeetingsController extends ChangeNotifier {
     _streamStartedAt = null;
   }
 
+  /// 로컬 표시용 meeting_id를 날짜 기반으로 생성합니다.
   String _makeMeetingId(DateTime now, int ordinal) {
     final date =
         '${now.year.toString().padLeft(4, '0')}'
@@ -414,6 +451,7 @@ class MeetingsController extends ChangeNotifier {
     return 'MTG-$date-${ordinal.toString().padLeft(3, '0')}';
   }
 
+  /// 상태 enum을 사용자에게 보여줄 짧은 안내 문구로 변환합니다.
   String _messageFor(MeetingStatus status) {
     return switch (status) {
       MeetingStatus.ready => 'Ready. Press Record to stream PCM audio.',
@@ -435,6 +473,7 @@ class MeetingsController extends ChangeNotifier {
     };
   }
 
+  /// 개발자용 예외를 사용자에게 보여줄 한국어 메시지로 변환합니다.
   String _userMessage(Object error) {
     if (error is AppException) return error.message;
     return '요청에 실패했습니다. 서버와 네트워크 상태를 확인해 주세요.';

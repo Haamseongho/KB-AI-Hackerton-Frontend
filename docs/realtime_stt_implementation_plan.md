@@ -45,21 +45,25 @@ Frontend implications:
 - Batch summary/minutes starts through `/meetings/{meeting_id}/start`.
 - Realtime summary/minutes starts through `/meetings/{meeting_id}/minutes-from-realtime`.
 
-Current first implementation slice:
+Implemented slices:
 - Split the previous single-file app into `app`, `core`, and `features` folders.
 - Add typed meeting, recording, transcript, and WebSocket state models.
 - Add REST/WebSocket configuration through `API_BASE_URL` and `WS_BASE_URL`.
 - Add iOS/Android microphone permission declarations.
 - Add runtime microphone permission service.
 - Build the Vercel web frontend-inspired meeting rooms and room detail UI.
-- Keep actual PCM streaming, recorder persistence, and local DB as replaceable service/repository boundaries.
+- Open realtime STT WebSocket with backend UUID and send 16 kHz mono PCM chunks.
+- Parse backend `status`, `transcript.partial`, `transcript.final`, and `error` events into typed Dart events.
+- Pause/stop the realtime stream by closing audio and WebSocket resources.
+- Generate minutes through `POST /meetings/{meeting_id}/minutes-from-realtime`.
+- Store returned minutes metadata: `minutes_json_s3_key`, `minutes_markdown_s3_key`, and `pdf_s3_key`.
+- Save final transcript text to a local txt file when leaving a room.
 
-Out of scope for this first slice:
-- Real microphone PCM chunk streaming.
+Remaining out of scope:
+- Real encoded recording file persistence for playback/upload (`m4a`/`wav`).
 - Real SQLite schema migration.
-- Real WebSocket server integration test.
-- Real S3 upload completion flow.
-- Real LangGraph / Bedrock summary result rendering.
+- Real WebSocket server integration test on device/emulator.
+- Real S3 upload completion flow for recording assets.
 
 ## Mobile Mockup Parity Check
 
@@ -81,29 +85,27 @@ The mockup now contains executable test logic, not only static UI. Flutter shoul
 
 ## Next Implementation Slices
 
-1. Recorder integration
-   - Use `record` to capture microphone audio.
-   - Confirm whether the package can provide realtime PCM stream and saved file simultaneously on iOS/Android.
-   - If not, use separate capture paths: PCM stream for STT, encoded file for local playback/upload.
+1. Encoded recording file persistence
+   - Add a dedicated saved-file recording path for playback/upload.
+   - Confirm whether realtime PCM streaming and encoded file recording can run simultaneously on iOS/Android.
+   - If simultaneous capture is unstable, keep PCM streaming for realtime STT and save a post-session recording only where platform support is confirmed.
+   - Persist `recording_file_path`, `recording_content_type`, `recording_duration_ms`, and realtime audio format metadata.
 
-2. WebSocket integration
-   - Wire `TranscriptionSocketClient` to backend endpoint.
-   - Send `start` JSON control event.
-   - Send ordered PCM chunks.
-   - Parse typed status, partial transcript, final transcript, and error events.
-   - Handle pause as either control event or stream close + new segment based on backend behavior.
-
-3. Local DB integration
+2. Local DB integration
    - Replace in-memory repository with SQLite repository.
    - Persist meetings, recordings, transcript segments, stream sessions, and upload metadata.
    - Add search by title, meeting_id, date, status, and upload state.
 
-4. REST upload and summary
-   - Request presigned upload URLs for recording and transcript.
-   - Upload assets with `PUT`.
-   - Mark upload complete.
-   - Request summary/minutes generation.
-   - Fetch and render result.
+3. REST upload and result rendering
+   - Request presigned upload URL for the saved recording asset.
+   - Upload the recording file with `PUT`.
+   - Start the batch pipeline through `/meetings/{meeting_id}/start` only when using saved-audio upload flow.
+   - Fetch and render `/meetings/{meeting_id}/result`, including summary, decisions, action items, markdown key, and PDF key.
+
+4. Device integration test
+   - Run backend locally and launch Flutter with `API_BASE_URL` / `WS_BASE_URL`.
+   - Validate Android emulator URL `10.0.2.2` and iOS simulator URL `localhost`.
+   - Verify microphone permission, WebSocket open, PCM chunks, partial/final transcript rendering, and `/minutes-from-realtime` response handling.
 
 ## Platform Permission Checklist
 
