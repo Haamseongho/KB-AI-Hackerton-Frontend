@@ -151,7 +151,7 @@ class _MeetingsPageState extends State<MeetingsPage> {
             FilledButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _controller.requestUpload();
+                _controller.generateMinutesFromRealtime();
               },
               child: const Text('확인'),
             ),

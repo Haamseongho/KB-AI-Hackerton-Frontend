@@ -21,6 +21,10 @@ class MeetingRoom {
     this.autoScroll = true,
     this.streamSessionId,
     this.streamSegmentCount = 0,
+    this.minutesJsonS3Key,
+    this.minutesMarkdownS3Key,
+    this.pdfS3Key,
+    this.uploadedAt,
   });
 
   final String localId;
@@ -39,6 +43,10 @@ class MeetingRoom {
   final bool autoScroll;
   final String? streamSessionId;
   final int streamSegmentCount;
+  final String? minutesJsonS3Key;
+  final String? minutesMarkdownS3Key;
+  final String? pdfS3Key;
+  final DateTime? uploadedAt;
 
   MeetingRoom copyWith({
     String? localId,
@@ -58,6 +66,10 @@ class MeetingRoom {
     bool? autoScroll,
     String? streamSessionId,
     int? streamSegmentCount,
+    String? minutesJsonS3Key,
+    String? minutesMarkdownS3Key,
+    String? pdfS3Key,
+    DateTime? uploadedAt,
   }) {
     return MeetingRoom(
       localId: localId ?? this.localId,
@@ -78,6 +90,10 @@ class MeetingRoom {
       autoScroll: autoScroll ?? this.autoScroll,
       streamSessionId: streamSessionId ?? this.streamSessionId,
       streamSegmentCount: streamSegmentCount ?? this.streamSegmentCount,
+      minutesJsonS3Key: minutesJsonS3Key ?? this.minutesJsonS3Key,
+      minutesMarkdownS3Key: minutesMarkdownS3Key ?? this.minutesMarkdownS3Key,
+      pdfS3Key: pdfS3Key ?? this.pdfS3Key,
+      uploadedAt: uploadedAt ?? this.uploadedAt,
     );
   }
 }

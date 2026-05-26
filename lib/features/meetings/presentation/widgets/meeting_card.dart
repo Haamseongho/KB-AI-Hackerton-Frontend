@@ -73,8 +73,8 @@ class MeetingCard extends StatelessWidget {
                   Expanded(
                     child: TextButton.icon(
                       onPressed: onUpload,
-                      icon: const Icon(Icons.cloud_upload_outlined),
-                      label: const Text('Upload to S3'),
+                      icon: const Icon(Icons.description_outlined),
+                      label: const Text('Minutes'),
                     ),
                   ),
                 ],
@@ -104,6 +104,7 @@ class _RoomIcon extends StatelessWidget {
       MeetingStatus.recording || MeetingStatus.paused => Icons.graphic_eq,
       MeetingStatus.completed ||
       MeetingStatus.transcriptionCompleted => Icons.check_circle_outline,
+      MeetingStatus.generatingMinutes => Icons.pending_actions_outlined,
       MeetingStatus.uploaded => Icons.cloud_done_outlined,
       _ => Icons.groups_2_outlined,
     };

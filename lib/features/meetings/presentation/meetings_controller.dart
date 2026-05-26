@@ -4,25 +4,41 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/errors/app_exception.dart';
 import '../../../core/permissions/microphone_permission_service.dart';
+import '../../../core/websocket/transcription_socket_client.dart';
+import '../../recordings/data/realtime_audio_streaming_service.dart';
 import '../../meetings/data/meeting_api.dart';
 import '../domain/meeting_repository.dart';
 import '../domain/meeting_room.dart';
 import '../domain/meeting_status.dart';
 import '../domain/meeting_type.dart';
+import '../domain/recording_asset.dart';
 import '../domain/transcript_segment.dart';
+import '../domain/transcription_event.dart';
 
 class MeetingsController extends ChangeNotifier {
   MeetingsController({
     required MeetingRepository repository,
     required MeetingApi api,
     MicrophonePermissionService? permissionService,
+    TranscriptionSocketClient? transcriptionSocketClient,
+    RealtimeAudioStreamingService? audioStreamingService,
   }) : _repository = repository,
        _api = api,
-       _permissionService = permissionService ?? MicrophonePermissionService();
+       _permissionService = permissionService ?? MicrophonePermissionService(),
+       _transcriptionSocketClient =
+           transcriptionSocketClient ?? TranscriptionSocketClient(),
+       _audioStreamingService =
+           audioStreamingService ?? RealtimeAudioStreamingService();
 
   final MeetingRepository _repository;
   final MeetingApi _api;
   final MicrophonePermissionService _permissionService;
+  final TranscriptionSocketClient _transcriptionSocketClient;
+  final RealtimeAudioStreamingService _audioStreamingService;
+  StreamSubscription<Uint8List>? _audioSubscription;
+  StreamSubscription<TranscriptionEvent>? _transcriptionSubscription;
+  DateTime? _streamStartedAt;
+  final Map<String, Future<String>> _backendCreateFutures = {};
 
   List<MeetingRoom> rooms = const [];
   MeetingRoom? selectedRoom;
@@ -70,30 +86,12 @@ class MeetingsController extends ChangeNotifier {
     selectRoom(room);
 
     unawaited(
-      _api
-          .createMeetingRoom(
-            title: room.title,
-            meetingType: meetingType,
-            notes: notes,
-          )
-          .then((json) async {
-            final backendId = json['id'];
-            if (backendId is! String) return <String, dynamic>{};
-            final updated = room.copyWith(backendId: backendId);
-            await _repository.saveRoom(updated);
-            rooms = await _repository.listRooms(query: query);
-            if (selectedRoom?.localId == updated.localId) {
-              selectedRoom = updated;
-            }
-            notifyListeners();
-            return json;
-          })
-          .catchError((Object error) {
-            statusMessage = 'Local room created. REST create failed.';
-            errorMessage = error.toString();
-            notifyListeners();
-            return <String, dynamic>{};
-          }),
+      _ensureBackendMeeting(room).catchError((Object error) {
+        statusMessage = 'Local room created. REST create failed.';
+        errorMessage = error.toString();
+        notifyListeners();
+        return '';
+      }),
     );
   }
 
@@ -115,10 +113,40 @@ class MeetingsController extends ChangeNotifier {
       return;
     }
 
-    final updated = room.copyWith(
+    await _stopRealtimeStream(controlType: 'stop');
+
+    try {
+      final backendMeetingId = await _ensureBackendMeeting(room);
+      _listenToTranscriptionEvents();
+      await _transcriptionSocketClient.connect(meetingId: backendMeetingId);
+      _streamStartedAt = DateTime.now();
+
+      final audioStream = await _audioStreamingService.startPcmStream();
+      _audioSubscription = audioStream.listen(
+        _transcriptionSocketClient.sendPcmChunk,
+        onError: (Object error) {
+          errorMessage = _userMessage(error);
+          notifyListeners();
+        },
+        cancelOnError: true,
+      );
+    } catch (error) {
+      await _stopRealtimeStream(controlType: 'stop');
+      final failed = (selectedRoom ?? room).copyWith(
+        status: MeetingStatus.paused,
+        updatedAt: DateTime.now(),
+      );
+      await _saveAndSelect(failed, 'Realtime stream failed.');
+      errorMessage = _userMessage(error);
+      notifyListeners();
+      return;
+    }
+
+    final activeRoom = selectedRoom ?? room;
+    final updated = activeRoom.copyWith(
       status: MeetingStatus.recording,
       updatedAt: DateTime.now(),
-      streamSegmentCount: room.streamSegmentCount + 1,
+      streamSegmentCount: activeRoom.streamSegmentCount + 1,
       partialTranscript: null,
       streamSessionId: 'stream-${DateTime.now().microsecondsSinceEpoch}',
     );
@@ -128,6 +156,8 @@ class MeetingsController extends ChangeNotifier {
   Future<void> pauseRecording() async {
     final room = selectedRoom;
     if (room == null) return;
+
+    await _stopRealtimeStream(controlType: 'pause');
 
     final updated = room.copyWith(
       status: MeetingStatus.paused,
@@ -141,10 +171,13 @@ class MeetingsController extends ChangeNotifier {
     final room = selectedRoom;
     if (room == null) return;
 
+    await _stopRealtimeStream(controlType: 'stop');
+
     final updated = room.copyWith(
       status: room.segments.isEmpty
           ? MeetingStatus.ready
           : MeetingStatus.transcriptionCompleted,
+      recording: room.recording ?? _recordingAssetFor(room),
       updatedAt: DateTime.now(),
       clearPartialTranscript: true,
     );
@@ -179,23 +212,26 @@ class MeetingsController extends ChangeNotifier {
     await _saveAndSelect(updated, 'Final transcript received.');
   }
 
-  Future<void> requestUpload() async {
+  Future<void> generateMinutesFromRealtime() async {
     final room = selectedRoom;
     if (room == null) return;
 
     try {
-      final backendMeetingId = room.backendId;
-      if (backendMeetingId == null) {
-        throw const AppException(
-          'Backend meeting id is missing. Create the room while the API server is reachable before upload.',
-        );
-      }
-      statusMessage = 'Requesting realtime minutes generation.';
+      final backendMeetingId = await _ensureBackendMeeting(room);
+      final generating = room.copyWith(
+        backendId: backendMeetingId,
+        status: MeetingStatus.generatingMinutes,
+        updatedAt: DateTime.now(),
+      );
+      await _saveAndSelect(
+        generating,
+        'Requesting realtime minutes generation.',
+      );
       errorMessage = null;
       notifyListeners();
-      final segments = room.segments.isEmpty
+      final segments = generating.segments.isEmpty
           ? null
-          : room.segments
+          : generating.segments
                 .map(
                   (segment) => {
                     'speaker_label': segment.speaker,
@@ -203,12 +239,18 @@ class MeetingsController extends ChangeNotifier {
                   },
                 )
                 .toList(growable: false);
-      await _api.createMinutesFromRealtime(
+      final result = await _api.createMinutesFromRealtime(
         backendMeetingId,
         segments: segments,
       );
-      final updated = room.copyWith(
-        status: MeetingStatus.completed,
+      final updated = generating.copyWith(
+        status: MeetingStatus.fromJson(result['status'] as String?),
+        title: result['title'] as String?,
+        summary: result['summary'] as String?,
+        minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
+        minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
+        pdfS3Key: result['pdf_s3_key'] as String?,
+        uploadedAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
       await _saveAndSelect(updated, 'Realtime minutes generation completed.');
@@ -217,6 +259,8 @@ class MeetingsController extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> requestUpload() => generateMinutesFromRealtime();
 
   void toggleAutoScroll(bool value) {
     final room = selectedRoom;
@@ -234,6 +278,132 @@ class MeetingsController extends ChangeNotifier {
     statusMessage = message;
     errorMessage = null;
     notifyListeners();
+  }
+
+  Future<String> _ensureBackendMeeting(MeetingRoom room) async {
+    if (room.backendId != null) return room.backendId!;
+    final pending = _backendCreateFutures[room.localId];
+    if (pending != null) return pending;
+
+    final future = () async {
+      final json = await _api.createMeetingRoom(
+        title: room.title,
+        meetingType: room.meetingType,
+        notes: room.notes,
+      );
+      final backendId = json['id'];
+      if (backendId is! String || backendId.isEmpty) {
+        throw const AppException('Backend meeting id is missing in response.');
+      }
+
+      final updated = room.copyWith(
+        backendId: backendId,
+        updatedAt: DateTime.now(),
+      );
+      await _repository.saveRoom(updated);
+      rooms = await _repository.listRooms(query: query);
+      if (selectedRoom?.localId == room.localId) {
+        selectedRoom = updated;
+      }
+      notifyListeners();
+      return backendId;
+    }();
+
+    _backendCreateFutures[room.localId] = future;
+    try {
+      return await future;
+    } finally {
+      _backendCreateFutures.remove(room.localId);
+    }
+  }
+
+  void _listenToTranscriptionEvents() {
+    unawaited(_transcriptionSubscription?.cancel());
+    _transcriptionSubscription = _transcriptionSocketClient.events.listen(
+      _handleTranscriptionEvent,
+    );
+  }
+
+  void _handleTranscriptionEvent(TranscriptionEvent event) {
+    final room = selectedRoom;
+    if (room == null) return;
+
+    switch (event) {
+      case TranscriptionStatusEvent():
+        statusMessage = event.message;
+        notifyListeners();
+      case PartialTranscriptEvent():
+        final updated = room.copyWith(
+          partialTranscript: event.text,
+          updatedAt: DateTime.now(),
+        );
+        unawaited(_saveAndSelect(updated, event.text));
+      case FinalTranscriptEvent():
+        final segment = _withElapsedFallback(event.segment);
+        final updated = room.copyWith(
+          segments: [...room.segments, segment],
+          updatedAt: DateTime.now(),
+          clearPartialTranscript: true,
+        );
+        unawaited(_saveAndSelect(updated, 'Final transcript received.'));
+      case TranscriptionErrorEvent():
+        errorMessage = event.message;
+        notifyListeners();
+    }
+  }
+
+  TranscriptSegment _withElapsedFallback(TranscriptSegment segment) {
+    if (segment.startedAt != Duration.zero ||
+        segment.endedAt != Duration.zero) {
+      return segment;
+    }
+
+    final elapsed = _streamStartedAt == null
+        ? Duration.zero
+        : DateTime.now().difference(_streamStartedAt!);
+    return TranscriptSegment(
+      id: segment.id,
+      text: segment.text,
+      startedAt: elapsed,
+      endedAt: elapsed,
+      isFinal: segment.isFinal,
+      speaker: segment.speaker ?? 'Speaker 1',
+    );
+  }
+
+  RecordingAsset _recordingAssetFor(MeetingRoom room) {
+    return RecordingAsset(
+      fileName: '${room.meetingId}_realtime_stream.pcm',
+      filePath: 'local://realtime-stream/${room.meetingId}.pcm',
+      contentType: 'audio/pcm',
+      durationMs: _transcriptDuration(room).inMilliseconds,
+      realtimeAudioEncoding: 'pcm',
+      realtimeSampleRate: 16000,
+      realtimeChannels: 1,
+    );
+  }
+
+  Duration _transcriptDuration(MeetingRoom room) {
+    if (room.segments.isEmpty) return Duration.zero;
+    return room.segments
+        .map((segment) => segment.endedAt)
+        .reduce((a, b) => a > b ? a : b);
+  }
+
+  Future<void> _stopRealtimeStream({required String controlType}) async {
+    await _audioSubscription?.cancel();
+    _audioSubscription = null;
+    await _audioStreamingService.stop();
+
+    if (controlType == 'pause') {
+      _transcriptionSocketClient.pause();
+    } else {
+      await _transcriptionSocketClient.stop();
+    }
+    await _transcriptionSocketClient.close();
+    await _transcriptionSubscription?.cancel();
+    _transcriptionSubscription = null;
+    _streamStartedAt = null;
   }
 
   String _makeMeetingId(DateTime now, int ordinal) {
@@ -259,6 +429,7 @@ class MeetingsController extends ChangeNotifier {
       MeetingStatus.transcriptionCompleted => 'Transcription complete.',
       MeetingStatus.summaryQueued => 'Summary job is queued.',
       MeetingStatus.summarizing => 'Summarizing transcript.',
+      MeetingStatus.generatingMinutes => 'Generating meeting minutes.',
       MeetingStatus.completed => 'Meeting minutes are ready.',
       MeetingStatus.failed => 'Processing failed.',
     };
@@ -267,6 +438,15 @@ class MeetingsController extends ChangeNotifier {
   String _userMessage(Object error) {
     if (error is AppException) return error.message;
     return '요청에 실패했습니다. 서버와 네트워크 상태를 확인해 주세요.';
+  }
+
+  @override
+  void dispose() {
+    unawaited(_audioSubscription?.cancel());
+    unawaited(_transcriptionSubscription?.cancel());
+    unawaited(_audioStreamingService.dispose());
+    _transcriptionSocketClient.dispose();
+    super.dispose();
   }
 }
 

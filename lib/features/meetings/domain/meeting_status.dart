@@ -12,6 +12,7 @@ enum MeetingStatus {
   transcriptionCompleted('transcription_completed', 'Completed'),
   summaryQueued('summary_queued', 'Summary queued'),
   summarizing('summarizing', 'Summarizing'),
+  generatingMinutes('generating_minutes', 'Generating'),
   completed('completed', 'Completed'),
   failed('failed', 'Failed');
 

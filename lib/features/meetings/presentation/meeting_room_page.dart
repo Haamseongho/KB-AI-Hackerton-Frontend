@@ -64,8 +64,8 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
         actions: [
           TextButton.icon(
             onPressed: _showUploadDialog,
-            icon: const Icon(Icons.upload),
-            label: const Text('Upload'),
+            icon: const Icon(Icons.description_outlined),
+            label: const Text('Minutes'),
           ),
         ],
       ),
@@ -106,6 +106,12 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
               text: isPaused
                   ? 'If you cancel, recording remains paused. Press Record again to resume from the paused point.'
                   : 'Live transcript text appears in real time while recording. If you pause recording, live transcription will pause too.',
+            ),
+            const SizedBox(height: 18),
+            _MinutesResources(
+              summary: room.summary,
+              minutesMarkdownS3Key: room.minutesMarkdownS3Key,
+              pdfS3Key: room.pdfS3Key,
             ),
           ],
         ),
@@ -164,13 +170,61 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
             FilledButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _controller.requestUpload();
+                _controller.generateMinutesFromRealtime();
               },
               child: const Text('확인'),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+class _MinutesResources extends StatelessWidget {
+  const _MinutesResources({
+    required this.summary,
+    required this.minutesMarkdownS3Key,
+    required this.pdfS3Key,
+  });
+
+  final String? summary;
+  final String? minutesMarkdownS3Key;
+  final String? pdfS3Key;
+
+  @override
+  Widget build(BuildContext context) {
+    if (summary == null && minutesMarkdownS3Key == null && pdfS3Key == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Files & Results',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            if (summary != null) ...[
+              const SizedBox(height: 10),
+              Text(summary!),
+            ],
+            if (minutesMarkdownS3Key != null) ...[
+              const SizedBox(height: 10),
+              Text('Minutes: $minutesMarkdownS3Key'),
+            ],
+            if (pdfS3Key != null) ...[
+              const SizedBox(height: 6),
+              Text('PDF: $pdfS3Key'),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

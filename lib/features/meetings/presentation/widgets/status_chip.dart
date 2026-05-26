@@ -24,7 +24,8 @@ class StatusChip extends StatelessWidget {
       MeetingStatus.completed => Colors.blue.shade700,
       MeetingStatus.uploaded => Colors.green.shade700,
       MeetingStatus.summaryQueued ||
-      MeetingStatus.summarizing => Colors.indigo.shade700,
+      MeetingStatus.summarizing ||
+      MeetingStatus.generatingMinutes => Colors.indigo.shade700,
       MeetingStatus.failed => Colors.red.shade800,
     };
 
