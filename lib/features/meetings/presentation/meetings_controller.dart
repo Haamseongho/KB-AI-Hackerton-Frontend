@@ -6,6 +6,7 @@ import '../../../core/errors/app_exception.dart';
 import '../../../core/permissions/microphone_permission_service.dart';
 import '../../../core/websocket/transcription_socket_client.dart';
 import '../../recordings/data/realtime_audio_streaming_service.dart';
+import '../../recordings/data/saved_recording_file_service.dart';
 import '../../transcription/data/transcript_file_service.dart';
 import '../../meetings/data/meeting_api.dart';
 import '../domain/meeting_repository.dart';
@@ -28,6 +29,7 @@ class MeetingsController extends ChangeNotifier {
     MicrophonePermissionService? permissionService,
     TranscriptionSocketClient? transcriptionSocketClient,
     RealtimeAudioStreamingService? audioStreamingService,
+    SavedRecordingFileService? savedRecordingFileService,
     TranscriptFileService? transcriptFileService,
   }) : _repository = repository,
        _api = api,
@@ -36,6 +38,8 @@ class MeetingsController extends ChangeNotifier {
            transcriptionSocketClient ?? TranscriptionSocketClient(),
        _audioStreamingService =
            audioStreamingService ?? RealtimeAudioStreamingService(),
+       _savedRecordingFileService =
+           savedRecordingFileService ?? SavedRecordingFileService(),
        _transcriptFileService =
            transcriptFileService ?? TranscriptFileService();
 
@@ -44,6 +48,7 @@ class MeetingsController extends ChangeNotifier {
   final MicrophonePermissionService _permissionService;
   final TranscriptionSocketClient _transcriptionSocketClient;
   final RealtimeAudioStreamingService _audioStreamingService;
+  final SavedRecordingFileService _savedRecordingFileService;
   final TranscriptFileService _transcriptFileService;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<TranscriptionEvent>? _transcriptionSubscription;
@@ -158,6 +163,7 @@ class MeetingsController extends ChangeNotifier {
     }
 
     final activeRoom = selectedRoom ?? room;
+    final savedRecordingWarning = await _startSavedRecording(activeRoom);
     final updated = activeRoom.copyWith(
       status: MeetingStatus.recording,
       updatedAt: DateTime.now(),
@@ -165,7 +171,10 @@ class MeetingsController extends ChangeNotifier {
       partialTranscript: null,
       streamSessionId: 'stream-${DateTime.now().microsecondsSinceEpoch}',
     );
-    await _saveAndSelect(updated, 'Sending PCM audio to FastAPI.');
+    await _saveAndSelect(
+      updated,
+      savedRecordingWarning ?? 'Sending PCM audio to FastAPI.',
+    );
   }
 
   /// 현재 WebSocket/오디오 스트림을 닫고 transcript 누적 상태는 보존합니다.
@@ -174,6 +183,7 @@ class MeetingsController extends ChangeNotifier {
     if (room == null) return;
 
     await _stopRealtimeStream(controlType: 'pause');
+    await _pauseSavedRecording();
 
     final updated = room.copyWith(
       status: MeetingStatus.paused,
@@ -189,6 +199,7 @@ class MeetingsController extends ChangeNotifier {
     if (room == null) return;
 
     await _stopRealtimeStream(controlType: 'stop');
+    final recordingAsset = await _stopSavedRecording(room);
 
     final transcriptFilePath = await _transcriptFileService.saveTranscript(
       meetingId: room.meetingId,
@@ -200,7 +211,7 @@ class MeetingsController extends ChangeNotifier {
       status: room.segments.isEmpty
           ? MeetingStatus.ready
           : MeetingStatus.transcriptionCompleted,
-      recording: room.recording ?? _recordingAssetFor(room),
+      recording: recordingAsset ?? room.recording ?? _recordingAssetFor(room),
       transcriptFilePath: transcriptFilePath,
       updatedAt: DateTime.now(),
       clearPartialTranscript: true,
@@ -417,6 +428,43 @@ class MeetingsController extends ChangeNotifier {
     );
   }
 
+  /// 저장/업로드용 encoded 녹음 파일 생성을 시작하거나 재개합니다.
+  Future<String?> _startSavedRecording(MeetingRoom room) async {
+    try {
+      await _savedRecordingFileService.startOrResume(
+        meetingId: room.meetingId,
+        title: room.title,
+      );
+      return null;
+    } catch (error) {
+      return 'PCM streaming is active. Saved recording file failed: $error';
+    }
+  }
+
+  /// 저장/업로드용 encoded 녹음 파일을 일시정지합니다.
+  Future<void> _pauseSavedRecording() async {
+    try {
+      await _savedRecordingFileService.pause();
+    } catch (error) {
+      errorMessage = '녹음 파일 일시정지에 실패했습니다: $error';
+      notifyListeners();
+    }
+  }
+
+  /// 저장/업로드용 encoded 녹음 파일을 종료하고 metadata를 반환합니다.
+  Future<RecordingAsset?> _stopSavedRecording(MeetingRoom room) async {
+    try {
+      return _savedRecordingFileService.stop(
+        meetingId: room.meetingId,
+        title: room.title,
+      );
+    } catch (error) {
+      errorMessage = '녹음 파일 저장에 실패했습니다: $error';
+      notifyListeners();
+      return null;
+    }
+  }
+
   /// transcript segment 중 가장 마지막 종료 시각을 회의 길이로 사용합니다.
   Duration _transcriptDuration(MeetingRoom room) {
     if (room.segments.isEmpty) return Duration.zero;
@@ -484,6 +532,7 @@ class MeetingsController extends ChangeNotifier {
     unawaited(_audioSubscription?.cancel());
     unawaited(_transcriptionSubscription?.cancel());
     unawaited(_audioStreamingService.dispose());
+    unawaited(_savedRecordingFileService.dispose());
     _transcriptionSocketClient.dispose();
     super.dispose();
   }

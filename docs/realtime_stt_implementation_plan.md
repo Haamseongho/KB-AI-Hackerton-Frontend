@@ -58,12 +58,13 @@ Implemented slices:
 - Generate minutes through `POST /meetings/{meeting_id}/minutes-from-realtime`.
 - Store returned minutes metadata: `minutes_json_s3_key`, `minutes_markdown_s3_key`, and `pdf_s3_key`.
 - Save final transcript text to a local txt file when leaving a room.
+- Best-effort save an encoded `m4a` recording file for playback/upload while realtime PCM streaming is active.
 
 Remaining out of scope:
-- Real encoded recording file persistence for playback/upload (`m4a`/`wav`).
 - Real SQLite schema migration.
 - Real WebSocket server integration test on device/emulator.
 - Real S3 upload completion flow for recording assets.
+- Platform confirmation that simultaneous PCM streaming and encoded file recording is stable on all target iOS/Android devices.
 
 ## Mobile Mockup Parity Check
 
@@ -86,10 +87,10 @@ The mockup now contains executable test logic, not only static UI. Flutter shoul
 ## Next Implementation Slices
 
 1. Encoded recording file persistence
-   - Add a dedicated saved-file recording path for playback/upload.
-   - Confirm whether realtime PCM streaming and encoded file recording can run simultaneously on iOS/Android.
-   - If simultaneous capture is unstable, keep PCM streaming for realtime STT and save a post-session recording only where platform support is confirmed.
-   - Persist `recording_file_path`, `recording_content_type`, `recording_duration_ms`, and realtime audio format metadata.
+   - Current implementation starts a second `AudioRecorder` with `aacLc`/`m4a` as best-effort.
+   - Test on Android emulator, Android physical device, iOS simulator, and iOS physical device.
+   - If simultaneous capture is unstable, keep PCM streaming for realtime STT and disable file recording with a clear UI warning.
+   - Confirm saved `recording_file_path`, `recording_content_type`, `recording_duration_ms`, and realtime audio format metadata in the local repository.
 
 2. Local DB integration
    - Replace in-memory repository with SQLite repository.
