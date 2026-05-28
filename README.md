@@ -2,58 +2,63 @@
 
 Voice Doc Flutter frontend.
 
-이 앱은 FastAPI 백엔드와 통신해 회의 음성 업로드, 회의록 생성 작업 시작, 처리 상태 polling, 결과 조회를 수행합니다.
+Flutter 앱은 FastAPI backend를 통해 실시간 STT, 회의록 생성, S3 결과 저장 흐름을 실행합니다. Flutter는 Amazon Transcribe, Bedrock, S3 SDK를 직접 호출하지 않습니다.
 
-## Backend Flow
+## Current Backend
+
+기본 backend endpoint는 EC2 dev 서버입니다.
+
+```text
+API_BASE_URL=http://13.124.81.217:8080
+WS_BASE_URL=ws://13.124.81.217:8080
+```
+
+`lib/core/config/app_config.dart`에 기본값이 설정되어 있어 Xcode/VSCode에서 직접 실행해도 EC2 backend를 봅니다. 필요하면 `--dart-define`으로 override할 수 있습니다.
+
+## Realtime Flow
 
 ```text
 Flutter App
   -> POST /meetings
-  -> POST /meetings/{id}/upload-url
-  -> PUT presigned S3 upload_url
-  -> POST /meetings/{id}/start
-  -> GET /jobs/{job_id} 또는 GET /meetings/{id}
-  -> GET /meetings/{id}/result
+  -> WS /ws/meetings/{id}/transcribe
+  -> send 16 kHz mono PCM chunks
+  -> receive transcript.partial / transcript.final
+  -> POST /meetings/{id}/minutes-from-realtime
+  -> receive minutes_json_s3_key / minutes_markdown_s3_key / pdf_s3_key
 ```
 
-Flutter는 Transcribe, Bedrock, AWS SDK를 직접 호출하지 않습니다.
+## Android Team Run
 
-## Local Backend
+Android 팀원 실행 가이드는 다음 문서를 참고합니다.
 
-백엔드는 API 서버와 worker가 분리되어 있습니다. 로컬 end-to-end 테스트에는 터미널 2개가 필요합니다.
+[docs/android_team_run_guide.md](docs/android_team_run_guide.md)
+
+macOS:
 
 ```bash
-# Terminal 1
-cd ../KB-AI-Hackerton-Backend/server
-uv run uvicorn app.main:app --reload
+./scripts/run_android_ec2.sh
 ```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\run_android_ec2.ps1
+```
+
+디버그 APK 빌드:
 
 ```bash
-# Terminal 2
-cd ../KB-AI-Hackerton-Backend/server
-uv run python worker.py
+./scripts/build_android_debug_apk_ec2.sh
 ```
 
-Docker Compose를 쓰면 API와 worker를 함께 실행할 수 있습니다.
-
-```bash
-cd ../KB-AI-Hackerton-Backend/server
-docker compose up --build
+```powershell
+.\scripts\build_android_debug_apk_ec2.ps1
 ```
 
-## Flutter Local Run
+## Flutter Checks
 
 ```bash
 flutter pub get
-flutter run
 flutter analyze
 flutter test
 ```
-
-## API Base URL
-
-- iOS simulator: `http://localhost:8000`
-- Android emulator: `http://10.0.2.2:8000`
-- physical device: use the host machine LAN IP, for example `http://192.168.x.x:8000`
-
-API base URL은 widget 안에 직접 hardcode하지 말고 build config, `--dart-define`, 또는 local ignored config로 관리합니다.
