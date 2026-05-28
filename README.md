@@ -62,3 +62,7 @@ flutter pub get
 flutter analyze
 flutter test
 ```
+
+## Local Persistence
+
+회의방, backend meeting id, transcript segment, recording metadata는 SQLite(`voice_doc_flutter.db`)에 저장됩니다. 앱을 완전히 종료한 뒤 다시 실행해도 런타임에 생성한 room이 목록에 남아야 합니다.
