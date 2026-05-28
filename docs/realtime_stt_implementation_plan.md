@@ -107,6 +107,8 @@ The mockup now contains executable test logic, not only static UI. Flutter shoul
 4. Device integration test
    - Run backend locally and launch Flutter with `API_BASE_URL` / `WS_BASE_URL`.
    - Validate Android emulator URL `10.0.2.2` and iOS simulator URL `localhost`.
+   - For EC2 dev over plain HTTP/Nginx port 80, launch Flutter with `API_BASE_URL=http://<ec2-host>` and `WS_BASE_URL=ws://<ec2-host>`.
+   - For EC2 behind TLS, use `https://<domain>` and `wss://<domain>`.
    - Verify microphone permission, WebSocket open, PCM chunks, partial/final transcript rendering, and `/minutes-from-realtime` response handling.
 
 ## Platform Permission Checklist
