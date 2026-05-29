@@ -18,7 +18,7 @@ class CreateRoomSheet extends StatefulWidget {
 }
 
 class _CreateRoomSheetState extends State<CreateRoomSheet> {
-  final _titleController = TextEditingController(text: 'REALTIME_TEST');
+  final _titleController = TextEditingController();
   final _notesController = TextEditingController();
   MeetingType _meetingType = MeetingType.general;
   String _storageType = 'local_db';
@@ -68,6 +68,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 controller: _titleController,
                 decoration: const InputDecoration(
                   labelText: 'Room Title',
+                  hintText: 'e.g. AWS Architecture Review',
                   border: OutlineInputBorder(),
                 ),
               ),
