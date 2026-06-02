@@ -8,7 +8,11 @@ import '../features/meetings/presentation/meetings_controller.dart';
 import '../features/meetings/presentation/meetings_page.dart';
 
 class VoiceDocApp extends StatefulWidget {
-  const VoiceDocApp({super.key, this.repository, this.api});
+  const VoiceDocApp({
+    super.key,
+    this.repository,
+    this.api,
+  });
 
   final MeetingRepository? repository;
   final MeetingApi? api;
@@ -44,7 +48,7 @@ class _VoiceDocAppState extends State<VoiceDocApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Voice Doc',
+      title: 'VoiceDoc',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       home: MeetingsPage(controller: _controller),

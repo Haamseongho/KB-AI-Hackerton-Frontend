@@ -58,7 +58,7 @@ class MeetingCard extends StatelessWidget {
                     child: OutlinedButton.icon(
                       onPressed: onOpen,
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('Recording'),
+                      label: const Text('녹음'),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -66,7 +66,7 @@ class MeetingCard extends StatelessWidget {
                     child: OutlinedButton.icon(
                       onPressed: onOpen,
                       icon: const Icon(Icons.description_outlined),
-                      label: Text('Transcript ${room.segments.length}'),
+                      label: Text('대화록 ${room.segments.length}'),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -74,7 +74,7 @@ class MeetingCard extends StatelessWidget {
                     child: TextButton.icon(
                       onPressed: onUpload,
                       icon: const Icon(Icons.description_outlined),
-                      label: const Text('Minutes'),
+                      label: const Text('회의록'),
                     ),
                   ),
                 ],

@@ -36,7 +36,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
   Widget build(BuildContext context) {
     final room = _controller.selectedRoom;
     if (room == null) {
-      return const Scaffold(body: Center(child: Text('No room selected.')));
+      return const Scaffold(body: Center(child: Text('선택된 회의방이 없습니다.')));
     }
 
     final isPaused = room.status == MeetingStatus.paused;
@@ -65,7 +65,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
           TextButton.icon(
             onPressed: _showUploadDialog,
             icon: const Icon(Icons.description_outlined),
-            label: const Text('Minutes'),
+            label: const Text('회의록'),
           ),
         ],
       ),
@@ -104,8 +104,8 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
             const SizedBox(height: 18),
             _Notice(
               text: isPaused
-                  ? 'If you cancel, recording remains paused. Press Record again to resume from the paused point.'
-                  : 'Live transcript text appears in real time while recording. If you pause recording, live transcription will pause too.',
+                  ? '취소하면 녹음은 일시정지 상태로 유지됩니다. 녹음을 다시 누르면 중단 지점부터 이어서 진행됩니다.'
+                  : '녹음 중에는 실시간 대화록이 바로 표시됩니다. 녹음을 일시정지하면 실시간 변환도 함께 멈춥니다.',
             ),
             const SizedBox(height: 18),
             _MinutesResources(
@@ -130,21 +130,21 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Save Recording File?'),
+          title: const Text('녹음 파일을 저장할까요?'),
           content: const Text(
-            'If you save, the file will be stored locally and can be uploaded to S3 later.',
+            '저장하면 녹음 파일이 로컬에 보관되며 나중에 S3 업로드나 회의록 생성에 사용할 수 있습니다.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: const Text('취소'),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 _controller.leaveRoom();
               },
-              child: const Text('Save'),
+              child: const Text('저장'),
             ),
           ],
         );
@@ -160,7 +160,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
         return AlertDialog(
           title: const Text('회의록으로 정리하시겠습니까?'),
           content: Text(
-            '완료된 실시간 transcript를 기반으로 회의록 생성을 요청합니다.\n생성된 회의록 파일은 백엔드가 S3에 저장합니다.\n\nRoom: ${room?.title ?? '-'}\nmeeting_id: ${room?.meetingId ?? '-'}',
+            '완료된 실시간 대화록을 기반으로 회의록 생성을 요청합니다.\n생성된 회의록 파일은 백엔드가 S3에 저장합니다.\n\n회의방: ${room?.title ?? '-'}\nmeeting_id: ${room?.meetingId ?? '-'}',
           ),
           actions: [
             TextButton(
@@ -205,7 +205,7 @@ class _MinutesResources extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Files & Results',
+              '파일 및 결과',
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
@@ -216,7 +216,7 @@ class _MinutesResources extends StatelessWidget {
             ],
             if (minutesMarkdownS3Key != null) ...[
               const SizedBox(height: 10),
-              Text('Minutes: $minutesMarkdownS3Key'),
+              Text('회의록: $minutesMarkdownS3Key'),
             ],
             if (pdfS3Key != null) ...[
               const SizedBox(height: 6),
@@ -259,16 +259,16 @@ class _LiveTranscriptPanel extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text('LIVE STT', style: Theme.of(context).textTheme.labelLarge),
+                Text('실시간 STT', style: Theme.of(context).textTheme.labelLarge),
                 const Spacer(),
                 Checkbox(value: autoScroll, onChanged: _onAutoChanged),
-                const Text('Auto'),
+                const Text('자동 스크롤'),
               ],
             ),
             Text(
               isPaused
-                  ? 'Transcription is paused.'
-                  : 'Live transcription is active.',
+                  ? '실시간 변환이 일시정지되었습니다.'
+                  : '실시간 변환이 진행 중입니다.',
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
@@ -295,7 +295,7 @@ class _LiveTranscriptPanel extends StatelessWidget {
               child: segments.isEmpty && partialTranscript == null
                   ? const Center(
                       child: Text(
-                        'Live transcript text will appear here while recording.',
+                        '녹음을 시작하면 실시간 대화록이 여기에 표시됩니다.',
                       ),
                     )
                   : ListView(
@@ -311,7 +311,7 @@ class _LiveTranscriptPanel extends StatelessWidget {
                                 startedAt: Duration.zero,
                                 endedAt: Duration.zero,
                                 isFinal: false,
-                                speaker: 'Partial',
+                                speaker: '부분 결과',
                               ),
                             ),
                           ),
@@ -326,8 +326,8 @@ class _LiveTranscriptPanel extends StatelessWidget {
                 Expanded(
                   child: Text(
                     isPaused
-                        ? 'Paused. Press Record to open a new stream.'
-                        : 'Sending PCM audio to FastAPI and waiting for AWS transcript events.',
+                        ? '일시정지 상태입니다. 녹음을 다시 누르면 새 스트림으로 이어집니다.'
+                        : 'PCM 오디오를 FastAPI로 전송하고 대화록 이벤트를 기다리는 중입니다.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -358,7 +358,7 @@ class _TranscriptLine extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${_time(segment.startedAt)}   ${segment.speaker ?? 'Speaker'}   ${segment.isFinal ? 'Final' : 'Partial'}',
+            '${_time(segment.startedAt)}   ${segment.speaker ?? '화자'}   ${segment.isFinal ? '최종' : '부분'}',
             style: Theme.of(context).textTheme.labelSmall,
           ),
           const SizedBox(height: 4),
@@ -400,7 +400,7 @@ class _ControlRow extends StatelessWidget {
           child: FilledButton(
             onPressed: onRecord,
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Record'),
+            child: const Text('녹음'),
           ),
         ),
         const SizedBox(width: 8),
@@ -408,7 +408,7 @@ class _ControlRow extends StatelessWidget {
           child: FilledButton(
             onPressed: onPause,
             style: FilledButton.styleFrom(backgroundColor: Colors.amber),
-            child: Text(isPaused ? 'Paused' : 'Pause'),
+            child: Text(isPaused ? '일시정지됨' : '일시정지'),
           ),
         ),
         const SizedBox(width: 8),
@@ -416,7 +416,7 @@ class _ControlRow extends StatelessWidget {
           child: FilledButton(
             onPressed: onTestEvent,
             style: FilledButton.styleFrom(backgroundColor: Colors.blue),
-            child: const Text('Test Event'),
+            child: const Text('테스트'),
           ),
         ),
         const SizedBox(width: 8),
@@ -426,7 +426,7 @@ class _ControlRow extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF111827),
             ),
-            child: const Text('Leave'),
+            child: const Text('나가기'),
           ),
         ),
       ],

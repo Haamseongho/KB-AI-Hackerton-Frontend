@@ -46,7 +46,7 @@ class TranscriptionSocketClient {
         _events.add(
           const TranscriptionStatusEvent(
             status: 'closed',
-            message: 'WebSocket closed',
+            message: 'WebSocket 연결이 종료되었습니다.',
           ),
         );
       },
@@ -116,7 +116,7 @@ class TranscriptionSocketClient {
             status: decoded['status'] as String? ?? 'unknown',
             message:
                 decoded['message'] as String? ??
-                'Backend status: ${decoded['status'] ?? 'unknown'}',
+                '백엔드 상태: ${decoded['status'] ?? 'unknown'}',
           ),
         );
       case 'transcript.partial':
@@ -133,7 +133,7 @@ class TranscriptionSocketClient {
                   (decoded['segment_seq'] as int?)?.toString() ??
                   DateTime.now().microsecondsSinceEpoch.toString(),
               text: decoded['transcript_text'] as String? ?? '',
-              speaker: 'Speaker 1',
+              speaker: '화자 1',
               startedAt: Duration(
                 milliseconds: decoded['started_at_ms'] as int? ?? 0,
               ),
@@ -147,7 +147,7 @@ class TranscriptionSocketClient {
       case 'error':
         _events.add(
           TranscriptionErrorEvent(
-            message: decoded['message'] as String? ?? 'Transcription failed',
+            message: decoded['message'] as String? ?? '실시간 변환에 실패했습니다.',
           ),
         );
     }

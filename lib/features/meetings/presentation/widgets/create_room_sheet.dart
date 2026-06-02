@@ -58,7 +58,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
               ),
               const SizedBox(height: 20),
               Text(
-                'Create Meeting Room',
+                '회의방 만들기',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
                 ),
@@ -67,8 +67,8 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
               TextField(
                 controller: _titleController,
                 decoration: const InputDecoration(
-                  labelText: 'Room Title',
-                  hintText: 'e.g. AWS Architecture Review',
+                  labelText: '회의 제목',
+                  hintText: '예: AWS 아키텍처 검토',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -76,7 +76,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
               DropdownButtonFormField<MeetingType>(
                 initialValue: _meetingType,
                 decoration: const InputDecoration(
-                  labelText: 'Meeting Type',
+                  labelText: '회의 유형',
                   border: OutlineInputBorder(),
                 ),
                 items: MeetingType.values
@@ -93,19 +93,19 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 },
               ),
               const SizedBox(height: 14),
-              Text('Storage', style: Theme.of(context).textTheme.labelLarge),
+              Text('저장 위치', style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 8),
               SegmentedButton<String>(
                 segments: const [
                   ButtonSegment(
                     value: 'local_db',
                     icon: Icon(Icons.storage_outlined),
-                    label: Text('Local DB'),
+                    label: Text('로컬 DB'),
                   ),
                   ButtonSegment(
                     value: 'aws_rds',
                     icon: Icon(Icons.cloud_outlined),
-                    label: Text('AWS RDS'),
+                    label: Text('클라우드 DB'),
                   ),
                 ],
                 selected: {_storageType},
@@ -118,7 +118,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 controller: _notesController,
                 maxLines: 3,
                 decoration: const InputDecoration(
-                  labelText: 'Optional Notes',
+                  labelText: '메모',
                   hintText: '녹음 -> 실시간',
                   border: OutlineInputBorder(),
                 ),
@@ -137,7 +137,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                       onPressed: _isCreating
                           ? null
                           : () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                      child: const Text('취소'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -145,7 +145,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                     child: FilledButton.icon(
                       onPressed: _isCreating ? null : _create,
                       icon: const Icon(Icons.add),
-                      label: const Text('Create Room'),
+                      label: const Text('생성'),
                     ),
                   ),
                 ],
@@ -193,7 +193,7 @@ class _SchemaPreview extends StatelessWidget {
       ),
       child: Text(
         '{\n'
-        '  "room_title": "${title.trim().isEmpty ? 'Untitled Meeting' : title.trim()}",\n'
+        '  "room_title": "${title.trim().isEmpty ? '제목 없는 회의' : title.trim()}",\n'
         '  "meeting_id": "MTG-yyyyMMdd-###",\n'
         '  "status": "ready",\n'
         '  "meeting_type": "${meetingType.value}",\n'

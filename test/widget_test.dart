@@ -10,9 +10,9 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Meeting Rooms'), findsOneWidget);
-    expect(find.text('New Room'), findsOneWidget);
-    expect(find.text('No meeting rooms yet.'), findsOneWidget);
-    expect(find.textContaining('stream PCM audio'), findsOneWidget);
+    expect(find.text('회의방'), findsOneWidget);
+    expect(find.text('새 회의방'), findsOneWidget);
+    expect(find.text('아직 생성된 회의방이 없습니다.'), findsOneWidget);
+    expect(find.textContaining('PCM 오디오'), findsOneWidget);
   });
 }

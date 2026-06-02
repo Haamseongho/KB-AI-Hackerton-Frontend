@@ -51,7 +51,7 @@ class _MeetingsPageState extends State<MeetingsPage> {
               children: [
                 Expanded(
                   child: Text(
-                    'Meeting Rooms',
+                    '회의방',
                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
@@ -60,13 +60,13 @@ class _MeetingsPageState extends State<MeetingsPage> {
                 FilledButton.icon(
                   onPressed: _showCreateRoomSheet,
                   icon: const Icon(Icons.add),
-                  label: const Text('New Room'),
+                  label: const Text('새 회의방'),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              'REST ${AppConfig.apiBaseUrl} · WS ${AppConfig.wsBaseUrl}',
+              '서버 REST ${AppConfig.apiBaseUrl} · 실시간 WS ${AppConfig.wsBaseUrl}',
               style: Theme.of(context).textTheme.labelSmall,
             ),
             const SizedBox(height: 20),
@@ -74,7 +74,7 @@ class _MeetingsPageState extends State<MeetingsPage> {
               controller: _searchController,
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search),
-                hintText: 'room title, meeting_id, date',
+                hintText: '회의 제목, meeting_id, 날짜 검색',
                 border: OutlineInputBorder(),
               ),
               onChanged: _controller.search,
@@ -87,7 +87,7 @@ class _MeetingsPageState extends State<MeetingsPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
-                'Rooms are stored locally for quick testing. Open a room and press Record to stream PCM audio to FastAPI.',
+                '회의방은 로컬에 저장됩니다. 회의방을 열고 녹음을 시작하면 PCM 오디오가 FastAPI로 전송됩니다.',
               ),
             ),
             const SizedBox(height: 20),
@@ -96,7 +96,7 @@ class _MeetingsPageState extends State<MeetingsPage> {
             else if (_controller.rooms.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
-                child: Center(child: Text('No meeting rooms yet.')),
+                child: Center(child: Text('아직 생성된 회의방이 없습니다.')),
               )
             else
               ..._controller.rooms.map(
@@ -141,7 +141,7 @@ class _MeetingsPageState extends State<MeetingsPage> {
         return AlertDialog(
           title: const Text('회의록으로 정리하시겠습니까?'),
           content: Text(
-            '완료된 실시간 transcript를 기반으로 회의록 생성을 요청합니다.\n생성된 회의록 파일은 백엔드가 S3에 저장합니다.\n\nRoom: ${room?.title ?? '-'}\nmeeting_id: ${room?.meetingId ?? '-'}',
+            '완료된 실시간 대화록을 기반으로 회의록 생성을 요청합니다.\n생성된 회의록 파일은 백엔드가 S3에 저장합니다.\n\n회의방: ${room?.title ?? '-'}\nmeeting_id: ${room?.meetingId ?? '-'}',
           ),
           actions: [
             TextButton(

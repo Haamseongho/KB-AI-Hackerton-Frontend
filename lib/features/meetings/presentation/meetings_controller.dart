@@ -58,7 +58,7 @@ class MeetingsController extends ChangeNotifier {
   List<MeetingRoom> rooms = const [];
   MeetingRoom? selectedRoom;
   String query = '';
-  String statusMessage = 'Rooms are stored locally for quick testing.';
+  String statusMessage = '회의방은 로컬에 저장됩니다.';
   String? errorMessage;
   bool isLoading = false;
   bool debugMode = true;
@@ -91,7 +91,7 @@ class MeetingsController extends ChangeNotifier {
     final room = MeetingRoom(
       localId: 'local-${now.microsecondsSinceEpoch}',
       meetingId: meetingId,
-      title: title.trim().isEmpty ? 'Untitled Meeting' : title.trim(),
+      title: title.trim().isEmpty ? '제목 없는 회의' : title.trim(),
       meetingType: meetingType,
       status: MeetingStatus.ready,
       createdAt: now,
@@ -105,7 +105,7 @@ class MeetingsController extends ChangeNotifier {
 
     unawaited(
       _ensureBackendMeeting(room).catchError((Object error) {
-        statusMessage = 'Local room created. REST create failed.';
+        statusMessage = '로컬 회의방은 생성됐지만 REST 생성 요청은 실패했습니다.';
         errorMessage = error.toString();
         notifyListeners();
         return '';
@@ -156,7 +156,7 @@ class MeetingsController extends ChangeNotifier {
         status: MeetingStatus.paused,
         updatedAt: DateTime.now(),
       );
-      await _saveAndSelect(failed, 'Realtime stream failed.');
+      await _saveAndSelect(failed, '실시간 스트림 연결에 실패했습니다.');
       errorMessage = _userMessage(error);
       notifyListeners();
       return;
@@ -173,7 +173,7 @@ class MeetingsController extends ChangeNotifier {
     );
     await _saveAndSelect(
       updated,
-      savedRecordingWarning ?? 'Sending PCM audio to FastAPI.',
+      savedRecordingWarning ?? 'PCM 오디오를 FastAPI로 전송 중입니다.',
     );
   }
 
@@ -190,7 +190,7 @@ class MeetingsController extends ChangeNotifier {
       updatedAt: DateTime.now(),
       clearPartialTranscript: true,
     );
-    await _saveAndSelect(updated, 'Paused. Press Record to open a new stream.');
+    await _saveAndSelect(updated, '일시정지되었습니다. 녹음을 다시 누르면 새 스트림으로 이어집니다.');
   }
 
   /// 회의방을 나가며 realtime stream을 종료하고 transcript 파일을 로컬에 저장합니다.
@@ -218,7 +218,7 @@ class MeetingsController extends ChangeNotifier {
     );
     await _saveAndSelect(
       updated,
-      'Recording and transcript are saved locally.',
+      '녹음 파일과 대화록이 로컬에 저장되었습니다.',
     );
   }
 
@@ -234,7 +234,7 @@ class MeetingsController extends ChangeNotifier {
       startedAt: now,
       endedAt: now + const Duration(seconds: 3),
       isFinal: true,
-      speaker: 'Speaker 1',
+      speaker: '화자 1',
     );
 
     final updated = room.copyWith(
@@ -245,7 +245,7 @@ class MeetingsController extends ChangeNotifier {
       updatedAt: DateTime.now(),
       clearPartialTranscript: true,
     );
-    await _saveAndSelect(updated, 'Final transcript received.');
+    await _saveAndSelect(updated, '최종 대화록을 받았습니다.');
   }
 
   /// 최종 transcript segment를 backend `/minutes-from-realtime`로 보내 회의록을 생성합니다.
@@ -262,7 +262,7 @@ class MeetingsController extends ChangeNotifier {
       );
       await _saveAndSelect(
         generating,
-        'Requesting realtime minutes generation.',
+        '실시간 대화록 기반 회의록 생성을 요청 중입니다.',
       );
       errorMessage = null;
       notifyListeners();
@@ -290,7 +290,7 @@ class MeetingsController extends ChangeNotifier {
         uploadedAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
-      await _saveAndSelect(updated, 'Realtime minutes generation completed.');
+      await _saveAndSelect(updated, '실시간 회의록 생성이 완료되었습니다.');
     } catch (error) {
       errorMessage = _userMessage(error);
       notifyListeners();
@@ -334,7 +334,7 @@ class MeetingsController extends ChangeNotifier {
       );
       final backendId = json['id'];
       if (backendId is! String || backendId.isEmpty) {
-        throw const AppException('Backend meeting id is missing in response.');
+        throw const AppException('백엔드 응답에 meeting id가 없습니다.');
       }
 
       final updated = room.copyWith(
@@ -398,7 +398,7 @@ class MeetingsController extends ChangeNotifier {
           updatedAt: DateTime.now(),
           clearPartialTranscript: true,
         );
-        unawaited(_saveAndSelect(updated, 'Final transcript received.'));
+        unawaited(_saveAndSelect(updated, '최종 대화록을 받았습니다.'));
       case TranscriptionErrorEvent():
         errorMessage = event.message;
         notifyListeners();
@@ -421,7 +421,7 @@ class MeetingsController extends ChangeNotifier {
       startedAt: elapsed,
       endedAt: elapsed,
       isFinal: segment.isFinal,
-      speaker: segment.speaker ?? 'Speaker 1',
+      speaker: segment.speaker ?? '화자 1',
     );
   }
 
@@ -447,7 +447,7 @@ class MeetingsController extends ChangeNotifier {
       );
       return null;
     } catch (error) {
-      return 'PCM streaming is active. Saved recording file failed: $error';
+      return 'PCM 스트리밍은 진행 중이지만 녹음 파일 저장을 시작하지 못했습니다: $error';
     }
   }
 
@@ -512,23 +512,23 @@ class MeetingsController extends ChangeNotifier {
   /// 상태 enum을 사용자에게 보여줄 짧은 안내 문구로 변환합니다.
   String _messageFor(MeetingStatus status) {
     return switch (status) {
-      MeetingStatus.ready => 'Ready. Press Record to stream PCM audio.',
-      MeetingStatus.created => 'Meeting is created.',
-      MeetingStatus.uploadUrlIssued => 'Upload URL has been issued.',
-      MeetingStatus.uploading => 'Preparing minutes upload.',
-      MeetingStatus.uploaded => 'Uploaded to S3.',
-      MeetingStatus.queued => 'Meeting job is queued.',
-      MeetingStatus.orchestrationStarting => 'Workflow is starting.',
-      MeetingStatus.orchestrationStarted => 'Workflow has started.',
-      MeetingStatus.recording => 'Backend status: transcribing',
-      MeetingStatus.paused => 'Transcription is paused.',
-      MeetingStatus.transcribing => 'Backend status: transcribing',
-      MeetingStatus.transcriptionCompleted => 'Transcription complete.',
-      MeetingStatus.summaryQueued => 'Summary job is queued.',
-      MeetingStatus.summarizing => 'Summarizing transcript.',
-      MeetingStatus.generatingMinutes => 'Generating meeting minutes.',
-      MeetingStatus.completed => 'Meeting minutes are ready.',
-      MeetingStatus.failed => 'Processing failed.',
+      MeetingStatus.ready => '준비되었습니다. 녹음을 누르면 PCM 오디오 스트리밍을 시작합니다.',
+      MeetingStatus.created => '회의방이 생성되었습니다.',
+      MeetingStatus.uploadUrlIssued => '업로드 URL이 발급되었습니다.',
+      MeetingStatus.uploading => '회의록 생성을 준비 중입니다.',
+      MeetingStatus.uploaded => 'S3 업로드가 완료되었습니다.',
+      MeetingStatus.queued => '작업이 대기 중입니다.',
+      MeetingStatus.orchestrationStarting => '워크플로를 시작 중입니다.',
+      MeetingStatus.orchestrationStarted => '워크플로가 시작되었습니다.',
+      MeetingStatus.recording => '백엔드 상태: 변환 중',
+      MeetingStatus.paused => '실시간 변환이 일시정지되었습니다.',
+      MeetingStatus.transcribing => '백엔드 상태: 변환 중',
+      MeetingStatus.transcriptionCompleted => '대화록 변환이 완료되었습니다.',
+      MeetingStatus.summaryQueued => '요약 작업이 대기 중입니다.',
+      MeetingStatus.summarizing => '대화록을 요약 중입니다.',
+      MeetingStatus.generatingMinutes => '회의록을 생성 중입니다.',
+      MeetingStatus.completed => '회의록이 준비되었습니다.',
+      MeetingStatus.failed => '처리에 실패했습니다.',
     };
   }
 
@@ -555,5 +555,5 @@ const _debugTexts = [
   '리얼 타임 테스트.',
   '네.',
   '된 건가?',
-  'Realtime transcription test event.',
+  '실시간 변환 테스트 이벤트입니다.',
 ];

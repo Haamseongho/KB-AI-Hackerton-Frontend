@@ -50,7 +50,7 @@ class ApiClient {
         .timeout(const Duration(minutes: 5));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AppException('Presigned upload failed with ${response.statusCode}');
+      throw AppException('Presigned 업로드에 실패했습니다: ${response.statusCode}');
     }
   }
 
@@ -58,13 +58,13 @@ class ApiClient {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AppException(
         response.body.isEmpty
-            ? 'Request failed with ${response.statusCode}'
+            ? '요청에 실패했습니다: ${response.statusCode}'
             : response.body,
       );
     }
 
     final decoded = jsonDecode(utf8.decode(response.bodyBytes));
     if (decoded is Map<String, dynamic>) return decoded;
-    throw const AppException('Unexpected JSON response');
+    throw const AppException('예상하지 못한 JSON 응답입니다.');
   }
 }
