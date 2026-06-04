@@ -6,6 +6,8 @@ class TranscriptSegment {
     required this.endedAt,
     required this.isFinal,
     this.speaker,
+    this.confidenceScore,
+    this.isLowConfidence = false,
   });
 
   final String id;
@@ -14,4 +16,6 @@ class TranscriptSegment {
   final Duration endedAt;
   final bool isFinal;
   final String? speaker;
+  final double? confidenceScore;
+  final bool isLowConfidence;
 }

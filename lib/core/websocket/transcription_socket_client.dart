@@ -133,14 +133,22 @@ class TranscriptionSocketClient {
                   (decoded['segment_seq'] as int?)?.toString() ??
                   DateTime.now().microsecondsSinceEpoch.toString(),
               text: decoded['transcript_text'] as String? ?? '',
-              speaker: '화자 1',
+              speaker: decoded['speaker_label'] as String? ?? '화자 1',
               startedAt: Duration(
-                milliseconds: decoded['started_at_ms'] as int? ?? 0,
+                milliseconds:
+                    _intValue(decoded['start_time_ms']) ??
+                    _intValue(decoded['started_at_ms']) ??
+                    0,
               ),
               endedAt: Duration(
-                milliseconds: decoded['ended_at_ms'] as int? ?? 0,
+                milliseconds:
+                    _intValue(decoded['end_time_ms']) ??
+                    _intValue(decoded['ended_at_ms']) ??
+                    0,
               ),
               isFinal: true,
+              confidenceScore: _doubleValue(decoded['confidence_score']),
+              isLowConfidence: decoded['is_low_confidence'] == true,
             ),
           ),
         );
@@ -151,5 +159,21 @@ class TranscriptionSocketClient {
           ),
         );
     }
+  }
+
+  /// backend JSON 숫자가 int/double 어느 쪽으로 와도 millisecond 값으로 변환합니다.
+  int? _intValue(Object? value) {
+    if (value is int) return value;
+    if (value is double) return value.round();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  /// confidence score를 0~1 범위의 double로 안전하게 변환합니다.
+  double? _doubleValue(Object? value) {
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 }

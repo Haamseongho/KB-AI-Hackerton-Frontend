@@ -8,11 +8,7 @@ import '../features/meetings/presentation/meetings_controller.dart';
 import '../features/meetings/presentation/meetings_page.dart';
 
 class VoiceDocApp extends StatefulWidget {
-  const VoiceDocApp({
-    super.key,
-    this.repository,
-    this.api,
-  });
+  const VoiceDocApp({super.key, this.repository, this.api});
 
   final MeetingRepository? repository;
   final MeetingApi? api;

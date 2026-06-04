@@ -16,7 +16,7 @@ class SqliteMeetingRepository implements MeetingRepository {
   SqliteMeetingRepository({Database? database}) : _database = database;
 
   static const _databaseName = 'voice_doc_flutter.db';
-  static const _databaseVersion = 1;
+  static const _databaseVersion = 2;
 
   Database? _database;
 
@@ -29,6 +29,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       path,
       version: _databaseVersion,
       onCreate: _createSchema,
+      onUpgrade: _upgradeSchema,
     );
     _database = db;
     return db;
@@ -129,6 +130,8 @@ class SqliteMeetingRepository implements MeetingRepository {
         speaker TEXT,
         started_at_ms INTEGER NOT NULL,
         ended_at_ms INTEGER NOT NULL,
+        confidence_score REAL,
+        is_low_confidence INTEGER NOT NULL DEFAULT 0,
         is_final INTEGER NOT NULL,
         PRIMARY KEY (local_id, id),
         FOREIGN KEY (local_id) REFERENCES meetings(local_id) ON DELETE CASCADE
@@ -138,6 +141,22 @@ class SqliteMeetingRepository implements MeetingRepository {
     await db.execute(
       'CREATE INDEX idx_meetings_search ON meetings(title, meeting_id, status, created_at)',
     );
+  }
+
+  /// 기존 설치 기기의 DB에도 최신 backend transcript metadata 컬럼을 추가합니다.
+  Future<void> _upgradeSchema(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE transcript_segments ADD COLUMN confidence_score REAL',
+      );
+      await db.execute(
+        'ALTER TABLE transcript_segments ADD COLUMN is_low_confidence INTEGER NOT NULL DEFAULT 0',
+      );
+    }
   }
 
   Map<String, Object?> _meetingRow(MeetingRoom room) {
@@ -187,6 +206,8 @@ class SqliteMeetingRepository implements MeetingRepository {
       'speaker': segment.speaker,
       'started_at_ms': segment.startedAt.inMilliseconds,
       'ended_at_ms': segment.endedAt.inMilliseconds,
+      'confidence_score': segment.confidenceScore,
+      'is_low_confidence': segment.isLowConfidence ? 1 : 0,
       'is_final': segment.isFinal ? 1 : 0,
     };
   }
@@ -257,6 +278,8 @@ class SqliteMeetingRepository implements MeetingRepository {
       startedAt: Duration(milliseconds: row['started_at_ms']! as int),
       endedAt: Duration(milliseconds: row['ended_at_ms']! as int),
       isFinal: (row['is_final'] as int? ?? 1) == 1,
+      confidenceScore: _doubleOrNull(row['confidence_score']),
+      isLowConfidence: (row['is_low_confidence'] as int? ?? 0) == 1,
     );
   }
 
@@ -269,6 +292,12 @@ class SqliteMeetingRepository implements MeetingRepository {
 
   DateTime? _dateTimeOrNull(String? value) {
     return value == null ? null : DateTime.tryParse(value);
+  }
+
+  double? _doubleOrNull(Object? value) {
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    return null;
   }
 
   String _dateText(DateTime date) {

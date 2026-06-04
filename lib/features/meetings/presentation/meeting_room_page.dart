@@ -266,9 +266,7 @@ class _LiveTranscriptPanel extends StatelessWidget {
               ],
             ),
             Text(
-              isPaused
-                  ? '실시간 변환이 일시정지되었습니다.'
-                  : '실시간 변환이 진행 중입니다.',
+              isPaused ? '실시간 변환이 일시정지되었습니다.' : '실시간 변환이 진행 중입니다.',
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
@@ -293,11 +291,7 @@ class _LiveTranscriptPanel extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: segments.isEmpty && partialTranscript == null
-                  ? const Center(
-                      child: Text(
-                        '녹음을 시작하면 실시간 대화록이 여기에 표시됩니다.',
-                      ),
-                    )
+                  ? const Center(child: Text('녹음을 시작하면 실시간 대화록이 여기에 표시됩니다.'))
                   : ListView(
                       children: [
                         ...segments.map(_TranscriptLine.new),
@@ -358,7 +352,7 @@ class _TranscriptLine extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${_time(segment.startedAt)}   ${segment.speaker ?? '화자'}   ${segment.isFinal ? '최종' : '부분'}',
+            '${_time(segment.startedAt)}   ${segment.speaker ?? '화자'}   ${segment.isFinal ? '최종' : '부분'}${segment.isLowConfidence ? ' · 낮은 신뢰도' : ''}',
             style: Theme.of(context).textTheme.labelSmall,
           ),
           const SizedBox(height: 4),

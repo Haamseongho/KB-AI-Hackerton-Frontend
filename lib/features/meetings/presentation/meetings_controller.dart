@@ -216,10 +216,7 @@ class MeetingsController extends ChangeNotifier {
       updatedAt: DateTime.now(),
       clearPartialTranscript: true,
     );
-    await _saveAndSelect(
-      updated,
-      '녹음 파일과 대화록이 로컬에 저장되었습니다.',
-    );
+    await _saveAndSelect(updated, '녹음 파일과 대화록이 로컬에 저장되었습니다.');
   }
 
   /// 백엔드 연동 전에도 UI 흐름을 검증할 수 있도록 final transcript를 추가합니다.
@@ -260,10 +257,7 @@ class MeetingsController extends ChangeNotifier {
         status: MeetingStatus.uploading,
         updatedAt: DateTime.now(),
       );
-      await _saveAndSelect(
-        generating,
-        '실시간 대화록 기반 회의록 생성을 요청 중입니다.',
-      );
+      await _saveAndSelect(generating, '실시간 대화록 기반 회의록 생성을 요청 중입니다.');
       errorMessage = null;
       notifyListeners();
       final segments = generating.segments.isEmpty
@@ -272,6 +266,10 @@ class MeetingsController extends ChangeNotifier {
                 .map(
                   (segment) => {
                     'speaker_label': segment.speaker,
+                    'start_time_ms': segment.startedAt.inMilliseconds,
+                    'end_time_ms': segment.endedAt.inMilliseconds,
+                    'confidence_score': segment.confidenceScore,
+                    'is_low_confidence': segment.isLowConfidence,
                     'transcript_text': segment.text,
                   },
                 )
@@ -422,6 +420,8 @@ class MeetingsController extends ChangeNotifier {
       endedAt: elapsed,
       isFinal: segment.isFinal,
       speaker: segment.speaker ?? '화자 1',
+      confidenceScore: segment.confidenceScore,
+      isLowConfidence: segment.isLowConfidence,
     );
   }
 

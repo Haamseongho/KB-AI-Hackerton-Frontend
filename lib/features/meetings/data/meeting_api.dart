@@ -34,7 +34,7 @@ class MeetingApi {
 
   Future<Map<String, dynamic>> createMinutesFromRealtime(
     String backendMeetingId, {
-    List<Map<String, String?>>? segments,
+    List<Map<String, Object?>>? segments,
   }) {
     return _client.postJson(
       '/meetings/$backendMeetingId/minutes-from-realtime',
