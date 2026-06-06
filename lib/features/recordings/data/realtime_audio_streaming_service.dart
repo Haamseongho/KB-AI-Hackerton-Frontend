@@ -35,6 +35,14 @@ class RealtimeAudioStreamingService {
         noiseSuppress: true,
         autoGain: true,
         streamBufferSize: 4096,
+        androidConfig: const AndroidRecordConfig(
+          // record 6.x의 foreground service로 백그라운드 마이크 캡처를 유지합니다.
+          // ignore: deprecated_member_use
+          service: AndroidService(
+            title: 'VoiceDoc 회의 녹음 중',
+            content: '실시간 대화록을 생성하고 있습니다.',
+          ),
+        ),
       ),
     );
   }
