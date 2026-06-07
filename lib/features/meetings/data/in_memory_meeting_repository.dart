@@ -29,4 +29,9 @@ class InMemoryMeetingRepository implements MeetingRepository {
     }
     return room;
   }
+
+  @override
+  Future<void> deleteRoom(String localId) async {
+    _rooms.removeWhere((room) => room.localId == localId);
+  }
 }

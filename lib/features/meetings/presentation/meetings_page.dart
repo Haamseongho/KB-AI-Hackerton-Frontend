@@ -107,6 +107,7 @@ class _MeetingsPageState extends State<MeetingsPage> {
                     _controller.selectRoom(room);
                     _confirmUpload();
                   },
+                  onDelete: () => _confirmDelete(room),
                 ),
               ),
           ],
@@ -154,6 +155,53 @@ class _MeetingsPageState extends State<MeetingsPage> {
                 _controller.generateMinutesFromRealtime();
               },
               child: const Text('확인'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmDelete(MeetingRoom room) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('기기에서 삭제하시겠습니까?'),
+          content: Text(
+            '${room.title} 회의방과 기기에 저장된 녹음 파일 및 대화록이 삭제됩니다.\n\n'
+            '백엔드에 생성된 회의 데이터는 삭제되지 않습니다.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('취소'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                try {
+                  await _controller.deleteRoomFromDevice(room);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('기기에서 삭제했습니다.')));
+                } catch (_) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        _controller.errorMessage ?? '기기에서 삭제하지 못했습니다.',
+                      ),
+                    ),
+                  );
+                }
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError,
+              ),
+              child: const Text('삭제'),
             ),
           ],
         );

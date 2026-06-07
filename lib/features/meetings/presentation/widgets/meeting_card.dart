@@ -10,11 +10,13 @@ class MeetingCard extends StatelessWidget {
     required this.room,
     required this.onOpen,
     required this.onUpload,
+    required this.onDelete,
   });
 
   final MeetingRoom room;
   final VoidCallback onOpen;
   final VoidCallback onUpload;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +50,32 @@ class MeetingCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  StatusChip(status: room.status),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      PopupMenuButton<_MeetingCardAction>(
+                        tooltip: '회의방 옵션',
+                        onSelected: (action) {
+                          if (action == _MeetingCardAction.deleteFromDevice) {
+                            onDelete();
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: _MeetingCardAction.deleteFromDevice,
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_outline),
+                                SizedBox(width: 10),
+                                Text('기기에서 삭제'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      StatusChip(status: room.status),
+                    ],
+                  ),
                 ],
               ),
               const Divider(height: 28),
@@ -92,6 +119,8 @@ class MeetingCard extends StatelessWidget {
 
   String _two(int value) => value.toString().padLeft(2, '0');
 }
+
+enum _MeetingCardAction { deleteFromDevice }
 
 class _RoomIcon extends StatelessWidget {
   const _RoomIcon({required this.status});

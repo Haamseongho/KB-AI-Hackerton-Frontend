@@ -82,6 +82,19 @@ class SqliteMeetingRepository implements MeetingRepository {
     return room;
   }
 
+  @override
+  Future<void> deleteRoom(String localId) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'transcript_segments',
+        where: 'local_id = ?',
+        whereArgs: [localId],
+      );
+      await txn.delete('meetings', where: 'local_id = ?', whereArgs: [localId]);
+    });
+  }
+
   Future<void> close() async {
     await _database?.close();
     _database = null;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -54,6 +55,7 @@ class MeetingsController extends ChangeNotifier {
   StreamSubscription<TranscriptionEvent>? _transcriptionSubscription;
   DateTime? _streamStartedAt;
   final Map<String, Future<String>> _backendCreateFutures = {};
+  final Set<String> _deletedLocalIds = {};
 
   List<MeetingRoom> rooms = const [];
   MeetingRoom? selectedRoom;
@@ -119,6 +121,32 @@ class MeetingsController extends ChangeNotifier {
     statusMessage = _messageFor(room.status);
     errorMessage = null;
     notifyListeners();
+  }
+
+  /// 회의방과 연결된 녹음/대화록 파일을 이 기기에서만 삭제합니다.
+  Future<void> deleteRoomFromDevice(MeetingRoom room) async {
+    if (_isActive(room.status)) {
+      throw const AppException('녹음 중이거나 일시정지된 회의방은 나간 후 삭제해 주세요.');
+    }
+
+    _deletedLocalIds.add(room.localId);
+    try {
+      await _deleteLocalFile(room.recording?.filePath);
+      await _deleteLocalFile(room.transcriptFilePath);
+      await _repository.deleteRoom(room.localId);
+      if (selectedRoom?.localId == room.localId) {
+        selectedRoom = null;
+      }
+      rooms = await _repository.listRooms(query: query);
+      statusMessage = '회의방을 기기에서 삭제했습니다.';
+      errorMessage = null;
+      notifyListeners();
+    } catch (error) {
+      _deletedLocalIds.remove(room.localId);
+      errorMessage = '기기에서 회의방을 삭제하지 못했습니다.';
+      notifyListeners();
+      rethrow;
+    }
   }
 
   /// 마이크 권한을 확인한 뒤 backend WebSocket에 PCM 스트림을 전송합니다.
@@ -339,6 +367,9 @@ class MeetingsController extends ChangeNotifier {
         backendId: backendId,
         updatedAt: DateTime.now(),
       );
+      if (_deletedLocalIds.contains(room.localId)) {
+        return backendId;
+      }
       await _repository.saveRoom(updated);
       rooms = await _repository.listRooms(query: query);
       if (selectedRoom?.localId == room.localId) {
@@ -481,6 +512,20 @@ class MeetingsController extends ChangeNotifier {
     return room.segments
         .map((segment) => segment.endedAt)
         .reduce((a, b) => a > b ? a : b);
+  }
+
+  bool _isActive(MeetingStatus status) {
+    return status == MeetingStatus.recording ||
+        status == MeetingStatus.paused ||
+        status == MeetingStatus.transcribing;
+  }
+
+  Future<void> _deleteLocalFile(String? path) async {
+    if (path == null || path.isEmpty || path.contains('://')) return;
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+    }
   }
 
   /// 오디오 스트림과 WebSocket을 같은 생명주기로 정리합니다.
