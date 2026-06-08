@@ -41,4 +41,27 @@ class MeetingApi {
       body: segments == null ? null : {'segments': segments},
     );
   }
+
+  /// S3 회의록 PDF를 내려받을 수 있는 짧은 만료 시간의 URL을 요청합니다.
+  Future<Map<String, dynamic>> requestPdfDownloadUrl(String backendMeetingId) {
+    return _client.getJson('/meetings/$backendMeetingId/pdf-download-url');
+  }
+
+  /// 백엔드에 저장된 realtime transcript segment를 삭제합니다.
+  Future<Map<String, dynamic>> deleteTranscriptSegments(
+    String backendMeetingId,
+  ) {
+    return _client.deleteJson(
+      '/meetings/$backendMeetingId/transcript-segments',
+    );
+  }
+
+  /// S3에 생성된 JSON, Markdown, PDF 회의록 산출물을 삭제합니다.
+  Future<Map<String, dynamic>> deleteMeetingArtifacts(String backendMeetingId) {
+    return _client.deleteJson('/meetings/$backendMeetingId/artifacts');
+  }
+
+  Future<List<int>> downloadFileBytes(String url) async {
+    return _client.getBytes(url);
+  }
 }

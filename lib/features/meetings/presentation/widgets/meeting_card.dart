@@ -56,18 +56,18 @@ class MeetingCard extends StatelessWidget {
                       PopupMenuButton<_MeetingCardAction>(
                         tooltip: '회의방 옵션',
                         onSelected: (action) {
-                          if (action == _MeetingCardAction.deleteFromDevice) {
+                          if (action == _MeetingCardAction.deleteMeeting) {
                             onDelete();
                           }
                         },
                         itemBuilder: (context) => const [
                           PopupMenuItem(
-                            value: _MeetingCardAction.deleteFromDevice,
+                            value: _MeetingCardAction.deleteMeeting,
                             child: Row(
                               children: [
                                 Icon(Icons.delete_outline),
                                 SizedBox(width: 10),
-                                Text('기기에서 삭제'),
+                                Text('회의 삭제'),
                               ],
                             ),
                           ),
@@ -120,7 +120,7 @@ class MeetingCard extends StatelessWidget {
   String _two(int value) => value.toString().padLeft(2, '0');
 }
 
-enum _MeetingCardAction { deleteFromDevice }
+enum _MeetingCardAction { deleteMeeting }
 
 class _RoomIcon extends StatelessWidget {
   const _RoomIcon({required this.status});

@@ -112,6 +112,8 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
               summary: room.summary,
               minutesMarkdownS3Key: room.minutesMarkdownS3Key,
               pdfS3Key: room.pdfS3Key,
+              isDownloadingPdf: _controller.isDownloadingPdf,
+              onDownloadPdf: _controller.downloadAndOpenPdf,
             ),
           ],
         ),
@@ -186,11 +188,15 @@ class _MinutesResources extends StatelessWidget {
     required this.summary,
     required this.minutesMarkdownS3Key,
     required this.pdfS3Key,
+    required this.isDownloadingPdf,
+    required this.onDownloadPdf,
   });
 
   final String? summary;
   final String? minutesMarkdownS3Key;
   final String? pdfS3Key;
+  final bool isDownloadingPdf;
+  final VoidCallback onDownloadPdf;
 
   @override
   Widget build(BuildContext context) {
@@ -219,8 +225,20 @@ class _MinutesResources extends StatelessWidget {
               Text('회의록: $minutesMarkdownS3Key'),
             ],
             if (pdfS3Key != null) ...[
-              const SizedBox(height: 6),
-              Text('PDF: $pdfS3Key'),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: isDownloadingPdf ? null : onDownloadPdf,
+                  icon: isDownloadingPdf
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download_outlined),
+                  label: Text(isDownloadingPdf ? 'PDF 다운로드 중' : 'PDF 회의록 다운로드'),
+                ),
+              ),
             ],
           ],
         ),

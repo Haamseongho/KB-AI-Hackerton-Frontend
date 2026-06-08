@@ -167,10 +167,11 @@ class _MeetingsPageState extends State<MeetingsPage> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('기기에서 삭제하시겠습니까?'),
+          title: const Text('회의 데이터를 삭제하시겠습니까?'),
           content: Text(
-            '${room.title} 회의방과 기기에 저장된 녹음 파일 및 대화록이 삭제됩니다.\n\n'
-            '백엔드에 생성된 회의 데이터는 삭제되지 않습니다.',
+            '${room.title}의 백엔드 실시간 대화록과 S3 회의록 산출물, '
+            '기기에 저장된 녹음 파일 및 회의방 데이터가 삭제됩니다.\n\n'
+            '백엔드 회의 자체와 원본 오디오는 백엔드 정책에 따라 남을 수 있습니다.',
           ),
           actions: [
             TextButton(
@@ -181,17 +182,17 @@ class _MeetingsPageState extends State<MeetingsPage> {
               onPressed: () async {
                 Navigator.of(dialogContext).pop();
                 try {
-                  await _controller.deleteRoomFromDevice(room);
+                  await _controller.deleteRoom(room);
                   if (!mounted) return;
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('기기에서 삭제했습니다.')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('회의 데이터를 삭제했습니다.')),
+                  );
                 } catch (_) {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                        _controller.errorMessage ?? '기기에서 삭제하지 못했습니다.',
+                        _controller.errorMessage ?? '회의 데이터를 삭제하지 못했습니다.',
                       ),
                     ),
                   );

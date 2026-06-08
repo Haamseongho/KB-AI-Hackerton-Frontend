@@ -10,6 +10,7 @@ import '../../recordings/data/realtime_audio_streaming_service.dart';
 import '../../recordings/data/saved_recording_file_service.dart';
 import '../../transcription/data/transcript_file_service.dart';
 import '../../meetings/data/meeting_api.dart';
+import '../../meetings/data/pdf_download_service.dart';
 import '../domain/meeting_repository.dart';
 import '../domain/meeting_room.dart';
 import '../domain/meeting_status.dart';
@@ -32,6 +33,7 @@ class MeetingsController extends ChangeNotifier {
     RealtimeAudioStreamingService? audioStreamingService,
     SavedRecordingFileService? savedRecordingFileService,
     TranscriptFileService? transcriptFileService,
+    PdfDownloadService? pdfDownloadService,
   }) : _repository = repository,
        _api = api,
        _permissionService = permissionService ?? MicrophonePermissionService(),
@@ -42,7 +44,8 @@ class MeetingsController extends ChangeNotifier {
        _savedRecordingFileService =
            savedRecordingFileService ?? SavedRecordingFileService(),
        _transcriptFileService =
-           transcriptFileService ?? TranscriptFileService();
+           transcriptFileService ?? TranscriptFileService(),
+       _pdfDownloadService = pdfDownloadService ?? PdfDownloadService();
 
   final MeetingRepository _repository;
   final MeetingApi _api;
@@ -51,6 +54,7 @@ class MeetingsController extends ChangeNotifier {
   final RealtimeAudioStreamingService _audioStreamingService;
   final SavedRecordingFileService _savedRecordingFileService;
   final TranscriptFileService _transcriptFileService;
+  final PdfDownloadService _pdfDownloadService;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<TranscriptionEvent>? _transcriptionSubscription;
   DateTime? _streamStartedAt;
@@ -63,6 +67,7 @@ class MeetingsController extends ChangeNotifier {
   String statusMessage = '회의방은 로컬에 저장됩니다.';
   String? errorMessage;
   bool isLoading = false;
+  bool isDownloadingPdf = false;
   bool debugMode = true;
 
   /// 저장된 회의방 목록을 현재 검색어 기준으로 다시 불러옵니다.
@@ -123,14 +128,19 @@ class MeetingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 회의방과 연결된 녹음/대화록 파일을 이 기기에서만 삭제합니다.
-  Future<void> deleteRoomFromDevice(MeetingRoom room) async {
+  /// 백엔드 transcript/S3 산출물과 기기의 회의 데이터 및 파일을 함께 삭제합니다.
+  Future<void> deleteRoom(MeetingRoom room) async {
     if (_isActive(room.status)) {
       throw const AppException('녹음 중이거나 일시정지된 회의방은 나간 후 삭제해 주세요.');
     }
 
     _deletedLocalIds.add(room.localId);
     try {
+      final backendId = room.backendId;
+      if (backendId != null && backendId.isNotEmpty) {
+        await _api.deleteTranscriptSegments(backendId);
+        await _api.deleteMeetingArtifacts(backendId);
+      }
       await _deleteLocalFile(room.recording?.filePath);
       await _deleteLocalFile(room.transcriptFilePath);
       await _repository.deleteRoom(room.localId);
@@ -138,14 +148,49 @@ class MeetingsController extends ChangeNotifier {
         selectedRoom = null;
       }
       rooms = await _repository.listRooms(query: query);
-      statusMessage = '회의방을 기기에서 삭제했습니다.';
+      statusMessage = '회의방의 서버 산출물과 기기 데이터를 삭제했습니다.';
       errorMessage = null;
       notifyListeners();
     } catch (error) {
       _deletedLocalIds.remove(room.localId);
-      errorMessage = '기기에서 회의방을 삭제하지 못했습니다.';
+      errorMessage = _userMessage(error);
       notifyListeners();
       rethrow;
+    }
+  }
+
+  /// backend presigned URL로 PDF를 다운로드한 뒤 기기의 PDF 앱으로 엽니다.
+  Future<void> downloadAndOpenPdf() async {
+    final room = selectedRoom;
+    if (room == null) return;
+    final backendId = room.backendId;
+    if (backendId == null || backendId.isEmpty || room.pdfS3Key == null) {
+      errorMessage = '다운로드할 회의록 PDF가 아직 준비되지 않았습니다.';
+      notifyListeners();
+      return;
+    }
+
+    isDownloadingPdf = true;
+    errorMessage = null;
+    statusMessage = '회의록 PDF를 다운로드하고 있습니다.';
+    notifyListeners();
+    try {
+      final payload = await _api.requestPdfDownloadUrl(backendId);
+      final downloadUrl = payload['download_url'];
+      if (downloadUrl is! String || downloadUrl.isEmpty) {
+        throw const AppException('PDF 다운로드 URL이 없습니다.');
+      }
+      final bytes = await _api.downloadFileBytes(downloadUrl);
+      await _pdfDownloadService.saveAndOpen(
+        meetingId: room.meetingId,
+        bytes: bytes,
+      );
+      statusMessage = '회의록 PDF를 저장하고 열었습니다.';
+    } catch (error) {
+      errorMessage = _userMessage(error);
+    } finally {
+      isDownloadingPdf = false;
+      notifyListeners();
     }
   }
 

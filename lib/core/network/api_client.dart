@@ -36,6 +36,24 @@ class ApiClient {
     return _decodeMap(response);
   }
 
+  Future<Map<String, dynamic>> deleteJson(String path) async {
+    final response = await _client
+        .delete(_baseUrl.resolve(path))
+        .timeout(const Duration(seconds: 30));
+    return _decodeMap(response);
+  }
+
+  /// presigned GET URL에서 파일 bytes를 다운로드합니다.
+  Future<Uint8List> getBytes(String url) async {
+    final response = await _client
+        .get(Uri.parse(url))
+        .timeout(const Duration(minutes: 5));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AppException('파일 다운로드에 실패했습니다: ${response.statusCode}');
+    }
+    return response.bodyBytes;
+  }
+
   Future<void> putBytes(
     String url, {
     required Uint8List bytes,

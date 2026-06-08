@@ -19,7 +19,9 @@ void main() {
     expect(find.textContaining('PCM 오디오'), findsOneWidget);
   });
 
-  testWidgets('deletes a meeting room from the device menu', (tester) async {
+  testWidgets('deletes a meeting room from the integrated delete menu', (
+    tester,
+  ) async {
     final now = DateTime(2026, 6, 7);
     final repository = InMemoryMeetingRepository(
       rooms: [
@@ -41,11 +43,11 @@ void main() {
     expect(find.text('삭제할 회의'), findsOneWidget);
     await tester.tap(find.byTooltip('회의방 옵션'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('기기에서 삭제'));
+    await tester.tap(find.text('회의 삭제'));
     await tester.pumpAndSettle();
 
-    expect(find.text('기기에서 삭제하시겠습니까?'), findsOneWidget);
-    expect(find.textContaining('백엔드에 생성된 회의 데이터'), findsOneWidget);
+    expect(find.text('회의 데이터를 삭제하시겠습니까?'), findsOneWidget);
+    expect(find.textContaining('S3 회의록 산출물'), findsOneWidget);
     await tester.tap(find.text('삭제'));
     await tester.pumpAndSettle();
 
