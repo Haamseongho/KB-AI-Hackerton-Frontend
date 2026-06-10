@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -67,6 +68,31 @@ class ApiClient {
         )
         .timeout(const Duration(minutes: 5));
 
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AppException('Presigned 업로드에 실패했습니다: ${response.statusCode}');
+    }
+  }
+
+  Future<void> putFile(
+    String url, {
+    required String filePath,
+    required String contentType,
+  }) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw const AppException('업로드할 녹음 파일을 찾을 수 없습니다.');
+    }
+
+    final request = http.StreamedRequest('PUT', Uri.parse(url))
+      ..headers['Content-Type'] = contentType
+      ..contentLength = await file.length();
+    await request.sink.addStream(file.openRead());
+    await request.sink.close();
+
+    final response = await _client
+        .send(request)
+        .timeout(const Duration(minutes: 10));
+    await response.stream.drain<void>();
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AppException('Presigned 업로드에 실패했습니다: ${response.statusCode}');
     }

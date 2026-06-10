@@ -64,11 +64,17 @@ Implemented slices:
   background transcript events cannot be stored in another selected room.
 - Block starting a second room recording while another room owns the active
   recording session, with an explicit user-facing notice.
+- Select a saved room recording or external supported audio file for batch
+  processing.
+- Stream the selected file to the S3 presigned PUT URL without loading the
+  entire recording into memory.
+- Start `/meetings/{meeting_id}/start`, persist `job_id`, poll job/meeting
+  status, restore active polling after app restart, and store completed result
+  metadata for PDF download.
 
 Remaining out of scope:
 - Real SQLite schema migration.
 - Real WebSocket server integration test on device/emulator.
-- Real S3 upload completion flow for recording assets.
 - Platform confirmation that simultaneous PCM streaming and encoded file recording is stable on all target iOS/Android devices.
 - Batch transcript source download/view APIs; the current backend exposes batch
   status/results and PDF download, but not the raw transcript artifact.
@@ -105,10 +111,12 @@ The mockup now contains executable test logic, not only static UI. Flutter shoul
    - Add search by title, meeting_id, date, status, and upload state.
 
 3. REST upload and result rendering
-   - Request presigned upload URL for the saved recording asset.
-   - Upload the recording file with `PUT`.
-   - Start the batch pipeline through `/meetings/{meeting_id}/start` only when using saved-audio upload flow.
-   - Fetch and render `/meetings/{meeting_id}/result`, including summary, decisions, action items, markdown key, and PDF key.
+   - Implemented: request a presigned upload URL for saved or selected audio.
+   - Implemented: stream the recording file with `PUT`.
+   - Implemented: start the batch pipeline through `/meetings/{meeting_id}/start`.
+   - Implemented: poll job/meeting status and fetch `/meetings/{meeting_id}/result`.
+   - Remaining: render decisions/action items and expose raw batch transcript
+     resources when backend download APIs are available.
 
 4. Device integration test
    - Run backend locally and launch Flutter with `API_BASE_URL` / `WS_BASE_URL`.

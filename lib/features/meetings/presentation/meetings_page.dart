@@ -103,9 +103,9 @@ class _MeetingsPageState extends State<MeetingsPage> {
                 (room) => MeetingCard(
                   room: room,
                   onOpen: () => _openRoom(room),
-                  onUpload: () {
+                  onBatch: () {
                     _controller.selectRoom(room);
-                    _confirmUpload();
+                    _showBatchDialog();
                   },
                   onDelete: () => _confirmDelete(room),
                 ),
@@ -134,27 +134,38 @@ class _MeetingsPageState extends State<MeetingsPage> {
     );
   }
 
-  void _confirmUpload() {
+  void _showBatchDialog() {
     showDialog<void>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         final room = _controller.selectedRoom;
         return AlertDialog(
-          title: const Text('회의록으로 정리하시겠습니까?'),
+          title: const Text('배치 전사를 시작할까요?'),
           content: Text(
-            '완료된 실시간 대화록을 기반으로 회의록 생성을 요청합니다.\n생성된 회의록 파일은 백엔드가 S3에 저장합니다.\n\n회의방: ${room?.title ?? '-'}\nmeeting_id: ${room?.meetingId ?? '-'}',
+            '오디오 파일을 S3에 업로드한 뒤 배치 전사와 회의록 생성을 시작합니다.\n'
+            '현재 백엔드는 두 작업을 하나의 파이프라인으로 처리합니다.\n\n'
+            '회의방: ${room?.title ?? '-'}\nmeeting_id: ${room?.meetingId ?? '-'}',
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('취소'),
             ),
-            FilledButton(
+            if (room?.recording != null)
+              OutlinedButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  _controller.startBatchTranscription(useSavedRecording: true);
+                },
+                child: const Text('저장된 녹음 사용'),
+              ),
+            FilledButton.icon(
               onPressed: () {
-                Navigator.of(context).pop();
-                _controller.generateMinutesFromRealtime();
+                Navigator.of(dialogContext).pop();
+                _controller.startBatchTranscription(useSavedRecording: false);
               },
-              child: const Text('확인'),
+              icon: const Icon(Icons.folder_open),
+              label: const Text('파일 선택'),
             ),
           ],
         );

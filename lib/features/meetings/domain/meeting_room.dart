@@ -26,6 +26,8 @@ class MeetingRoom {
     this.minutesMarkdownS3Key,
     this.pdfS3Key,
     this.uploadedAt,
+    this.batchJobId,
+    this.batchErrorMessage,
   });
 
   final String localId;
@@ -49,6 +51,8 @@ class MeetingRoom {
   final String? minutesMarkdownS3Key;
   final String? pdfS3Key;
   final DateTime? uploadedAt;
+  final String? batchJobId;
+  final String? batchErrorMessage;
 
   MeetingRoom copyWith({
     String? localId,
@@ -73,6 +77,9 @@ class MeetingRoom {
     String? minutesMarkdownS3Key,
     String? pdfS3Key,
     DateTime? uploadedAt,
+    String? batchJobId,
+    String? batchErrorMessage,
+    bool clearBatchError = false,
   }) {
     return MeetingRoom(
       localId: localId ?? this.localId,
@@ -98,6 +105,10 @@ class MeetingRoom {
       minutesMarkdownS3Key: minutesMarkdownS3Key ?? this.minutesMarkdownS3Key,
       pdfS3Key: pdfS3Key ?? this.pdfS3Key,
       uploadedAt: uploadedAt ?? this.uploadedAt,
+      batchJobId: batchJobId ?? this.batchJobId,
+      batchErrorMessage: clearBatchError
+          ? null
+          : batchErrorMessage ?? this.batchErrorMessage,
     );
   }
 }

@@ -16,7 +16,7 @@ class SqliteMeetingRepository implements MeetingRepository {
   SqliteMeetingRepository({Database? database}) : _database = database;
 
   static const _databaseName = 'voice_doc_flutter.db';
-  static const _databaseVersion = 2;
+  static const _databaseVersion = 3;
 
   Database? _database;
 
@@ -143,7 +143,10 @@ class SqliteMeetingRepository implements MeetingRepository {
         realtime_sample_rate INTEGER,
         realtime_channels INTEGER,
         audio_s3_key TEXT,
-        transcript_s3_key TEXT
+        transcript_s3_key TEXT,
+        recording_file_size_bytes INTEGER,
+        batch_job_id TEXT,
+        batch_error_message TEXT
       )
     ''');
 
@@ -183,6 +186,15 @@ class SqliteMeetingRepository implements MeetingRepository {
         'ALTER TABLE transcript_segments ADD COLUMN is_low_confidence INTEGER NOT NULL DEFAULT 0',
       );
     }
+    if (oldVersion < 3) {
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN recording_file_size_bytes INTEGER',
+      );
+      await db.execute('ALTER TABLE meetings ADD COLUMN batch_job_id TEXT');
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN batch_error_message TEXT',
+      );
+    }
   }
 
   Map<String, Object?> _meetingRow(MeetingRoom room) {
@@ -216,6 +228,9 @@ class SqliteMeetingRepository implements MeetingRepository {
       'realtime_channels': recording?.realtimeChannels,
       'audio_s3_key': recording?.audioS3Key,
       'transcript_s3_key': recording?.transcriptS3Key,
+      'recording_file_size_bytes': recording?.fileSizeBytes,
+      'batch_job_id': room.batchJobId,
+      'batch_error_message': room.batchErrorMessage,
     };
   }
 
@@ -272,6 +287,8 @@ class SqliteMeetingRepository implements MeetingRepository {
       minutesMarkdownS3Key: row['minutes_markdown_s3_key'] as String?,
       pdfS3Key: row['pdf_s3_key'] as String?,
       uploadedAt: _dateTimeOrNull(row['uploaded_at'] as String?),
+      batchJobId: row['batch_job_id'] as String?,
+      batchErrorMessage: row['batch_error_message'] as String?,
     );
   }
 
@@ -293,6 +310,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       realtimeChannels: row['realtime_channels'] as int? ?? 1,
       audioS3Key: row['audio_s3_key'] as String?,
       transcriptS3Key: row['transcript_s3_key'] as String?,
+      fileSizeBytes: row['recording_file_size_bytes'] as int?,
     );
   }
 

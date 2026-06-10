@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../../core/network/api_client.dart';
 import '../domain/meeting_type.dart';
 
@@ -21,6 +23,18 @@ class MeetingApi {
     return _client.postJson('/meetings/$backendMeetingId/start');
   }
 
+  Future<Map<String, dynamic>> getMeeting(String backendMeetingId) {
+    return _client.getJson('/meetings/$backendMeetingId');
+  }
+
+  Future<Map<String, dynamic>> getMeetingResult(String backendMeetingId) {
+    return _client.getJson('/meetings/$backendMeetingId/result');
+  }
+
+  Future<Map<String, dynamic>> getJob(String jobId) {
+    return _client.getJson('/jobs/$jobId');
+  }
+
   Future<Map<String, dynamic>> requestAudioUploadUrl(
     String backendMeetingId, {
     String fileExtension = 'm4a',
@@ -29,6 +43,26 @@ class MeetingApi {
     return _client.postJson(
       '/meetings/$backendMeetingId/upload-url',
       body: {'file_extension': fileExtension, 'content_type': contentType},
+    );
+  }
+
+  Future<void> uploadAudioBytes(
+    String uploadUrl, {
+    required Uint8List bytes,
+    required String contentType,
+  }) {
+    return _client.putBytes(uploadUrl, bytes: bytes, contentType: contentType);
+  }
+
+  Future<void> uploadAudioFile(
+    String uploadUrl, {
+    required String filePath,
+    required String contentType,
+  }) {
+    return _client.putFile(
+      uploadUrl,
+      filePath: filePath,
+      contentType: contentType,
     );
   }
 

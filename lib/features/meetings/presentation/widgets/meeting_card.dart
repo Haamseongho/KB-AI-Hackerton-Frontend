@@ -9,13 +9,13 @@ class MeetingCard extends StatelessWidget {
     super.key,
     required this.room,
     required this.onOpen,
-    required this.onUpload,
+    required this.onBatch,
     required this.onDelete,
   });
 
   final MeetingRoom room;
   final VoidCallback onOpen;
-  final VoidCallback onUpload;
+  final VoidCallback onBatch;
   final VoidCallback onDelete;
 
   @override
@@ -99,9 +99,9 @@ class MeetingCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextButton.icon(
-                      onPressed: onUpload,
-                      icon: const Icon(Icons.description_outlined),
-                      label: const Text('회의록'),
+                      onPressed: onBatch,
+                      icon: const Icon(Icons.cloud_upload_outlined),
+                      label: const Text('배치 전사'),
                     ),
                   ),
                 ],

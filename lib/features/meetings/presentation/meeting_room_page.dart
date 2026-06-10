@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../meetings/domain/meeting_room.dart';
 import '../../meetings/domain/meeting_status.dart';
 import '../../meetings/domain/transcript_segment.dart';
 import 'meetings_controller.dart';
@@ -120,6 +121,13 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                   : '녹음 중에는 실시간 대화록이 바로 표시됩니다. 녹음을 일시정지하면 실시간 변환도 함께 멈춥니다.',
             ),
             const SizedBox(height: 18),
+            _BatchTranscriptionPanel(
+              room: room,
+              isStarting: _controller.isStartingBatch,
+              onStart: _showBatchDialog,
+              onRefresh: _controller.refreshBatchStatus,
+            ),
+            const SizedBox(height: 18),
             _MinutesResources(
               summary: room.summary,
               minutesMarkdownS3Key: room.minutesMarkdownS3Key,
@@ -192,6 +200,164 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
         );
       },
     );
+  }
+
+  void _showBatchDialog() {
+    final room = _controller.selectedRoom;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('녹음 파일 배치 전사'),
+          content: Text(
+            '오디오 파일 전체를 S3에 업로드하고 배치 처리를 시작합니다.\n'
+            '배치 전사 완료 후 회의록까지 자동 생성됩니다.\n\n'
+            '${room?.recording == null ? '저장된 녹음이 없어 파일을 직접 선택해야 합니다.' : '이 회의방의 저장된 녹음을 사용하거나 다른 파일을 선택할 수 있습니다.'}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('취소'),
+            ),
+            if (room?.recording != null)
+              OutlinedButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  _controller.startBatchTranscription(useSavedRecording: true);
+                },
+                child: const Text('저장된 녹음'),
+              ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _controller.startBatchTranscription(useSavedRecording: false);
+              },
+              icon: const Icon(Icons.folder_open),
+              label: const Text('파일 선택'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _BatchTranscriptionPanel extends StatelessWidget {
+  const _BatchTranscriptionPanel({
+    required this.room,
+    required this.isStarting,
+    required this.onStart,
+    required this.onRefresh,
+  });
+
+  final MeetingRoom room;
+  final bool isStarting;
+  final VoidCallback onStart;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final recording = room.recording;
+    final hasJob = room.batchJobId != null;
+    final isProcessing =
+        hasJob &&
+        {
+          MeetingStatus.uploading,
+          MeetingStatus.uploaded,
+          MeetingStatus.queued,
+          MeetingStatus.transcribing,
+          MeetingStatus.summarizing,
+        }.contains(room.status);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '배치 파일 전사',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: isStarting || isProcessing ? null : onStart,
+                  icon: isStarting
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.cloud_upload_outlined),
+                  label: Text(isStarting ? '준비 중' : '배치 시작'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              recording == null
+                  ? '저장된 녹음이 없습니다. 지원되는 오디오 파일을 직접 선택할 수 있습니다.'
+                  : '${recording.fileName} · ${_fileSize(recording.fileSizeBytes)}',
+            ),
+            if (hasJob) ...[
+              const SizedBox(height: 12),
+              LinearProgressIndicator(value: _progressFor(room.status)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${room.status.label} · Job ${room.batchJobId}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: onRefresh,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('새로고침'),
+                  ),
+                ],
+              ),
+            ],
+            if (room.batchErrorMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                room.batchErrorMessage!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Text(
+              '배치 전사 원문 조회는 현재 백엔드 API가 없어 앱에서 제공하지 않습니다. '
+              '처리가 완료되면 요약과 PDF 회의록을 확인할 수 있습니다.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  double? _progressFor(MeetingStatus status) {
+    return switch (status) {
+      MeetingStatus.uploading => 0.2,
+      MeetingStatus.uploaded => 0.4,
+      MeetingStatus.queued => 0.5,
+      MeetingStatus.transcribing => 0.7,
+      MeetingStatus.summarizing => 0.9,
+      MeetingStatus.completed => 1,
+      _ => null,
+    };
+  }
+
+  String _fileSize(int? bytes) {
+    if (bytes == null || bytes <= 0) return '크기 정보 없음';
+    final megabytes = bytes / (1024 * 1024);
+    return '${megabytes.toStringAsFixed(1)} MB';
   }
 }
 

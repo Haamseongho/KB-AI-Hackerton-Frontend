@@ -96,6 +96,15 @@ Current backend compatibility:
 - Current backend `meeting_type` values are `one_on_one`, `small`, `medium`, and `unknown`.
 - Current `/meetings/{meeting_id}/upload-url` accepts one audio asset with `file_extension` and `content_type`.
 - Current summary/minutes pipeline starts through `POST /meetings/{meeting_id}/start`.
+- Flutter batch flow now selects a saved/local audio file, uploads it through
+  the presigned PUT URL, calls `/start`, persists `job_id`, and polls
+  `/jobs/{job_id}` plus `/meetings/{meeting_id}` until completion.
+- The current backend does not expose a batch transcript text/JSON download
+  endpoint. Flutter must show an explicit unsupported/pending notice instead of
+  pretending that the raw batch transcript can be opened.
+- The current backend does not expose a batch job cancellation endpoint.
+  Flutter must block destructive deletion and conflicting realtime processing
+  while a batch job is queued/transcribing/summarizing.
 
 ---
 

@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../core/errors/app_exception.dart';
 import '../../../core/permissions/microphone_permission_service.dart';
 import '../../../core/websocket/transcription_socket_client.dart';
 import '../../recordings/data/realtime_audio_streaming_service.dart';
+import '../../recordings/data/audio_file_picker_service.dart';
 import '../../recordings/data/saved_recording_file_service.dart';
 import '../../transcription/data/transcript_file_service.dart';
 import '../../meetings/data/meeting_api.dart';
@@ -32,8 +34,10 @@ class MeetingsController extends ChangeNotifier {
     TranscriptionSocketClient? transcriptionSocketClient,
     RealtimeAudioStreamingService? audioStreamingService,
     SavedRecordingFileService? savedRecordingFileService,
+    AudioFilePickerService? audioFilePickerService,
     TranscriptFileService? transcriptFileService,
     PdfDownloadService? pdfDownloadService,
+    Duration batchPollInterval = const Duration(seconds: 10),
   }) : _repository = repository,
        _api = api,
        _permissionService = permissionService ?? MicrophonePermissionService(),
@@ -43,9 +47,12 @@ class MeetingsController extends ChangeNotifier {
            audioStreamingService ?? RealtimeAudioStreamingService(),
        _savedRecordingFileService =
            savedRecordingFileService ?? SavedRecordingFileService(),
+       _audioFilePickerService =
+           audioFilePickerService ?? AudioFilePickerService(),
        _transcriptFileService =
            transcriptFileService ?? TranscriptFileService(),
-       _pdfDownloadService = pdfDownloadService ?? PdfDownloadService();
+       _pdfDownloadService = pdfDownloadService ?? PdfDownloadService(),
+       _batchPollInterval = batchPollInterval;
 
   final MeetingRepository _repository;
   final MeetingApi _api;
@@ -53,8 +60,10 @@ class MeetingsController extends ChangeNotifier {
   final TranscriptionSocketClient _transcriptionSocketClient;
   final RealtimeAudioStreamingService _audioStreamingService;
   final SavedRecordingFileService _savedRecordingFileService;
+  final AudioFilePickerService _audioFilePickerService;
   final TranscriptFileService _transcriptFileService;
   final PdfDownloadService _pdfDownloadService;
+  final Duration _batchPollInterval;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<TranscriptionEvent>? _transcriptionSubscription;
   DateTime? _streamStartedAt;
@@ -62,6 +71,8 @@ class MeetingsController extends ChangeNotifier {
   Future<void> _transcriptionEventQueue = Future.value();
   final Map<String, Future<String>> _backendCreateFutures = {};
   final Set<String> _deletedLocalIds = {};
+  final Map<String, Timer> _batchPollTimers = {};
+  final Set<String> _batchPollingLocalIds = {};
 
   List<MeetingRoom> rooms = const [];
   MeetingRoom? selectedRoom;
@@ -70,6 +81,7 @@ class MeetingsController extends ChangeNotifier {
   String? errorMessage;
   bool isLoading = false;
   bool isDownloadingPdf = false;
+  bool isStartingBatch = false;
   bool debugMode = true;
 
   String? get activeRecordingLocalId => _activeRecordingLocalId;
@@ -95,6 +107,11 @@ class MeetingsController extends ChangeNotifier {
     rooms = await _repository.listRooms(query: query);
     isLoading = false;
     notifyListeners();
+    for (final room in rooms) {
+      if (room.batchJobId != null && _isBatchProcessing(room.status)) {
+        _scheduleBatchPoll(room.localId, immediate: true);
+      }
+    }
   }
 
   /// 회의방 제목 또는 meeting_id 검색어를 적용합니다.
@@ -151,8 +168,17 @@ class MeetingsController extends ChangeNotifier {
     if (_isActive(room.status)) {
       throw const AppException('녹음 중이거나 일시정지된 회의방은 나간 후 삭제해 주세요.');
     }
+    if (room.batchJobId != null && _isBatchProcessing(room.status)) {
+      const message =
+          '배치 처리 중인 회의는 삭제할 수 없습니다. '
+          '현재 백엔드에 작업 취소 API가 없어 완료 또는 실패 후 삭제해야 합니다.';
+      errorMessage = message;
+      notifyListeners();
+      throw const AppException(message);
+    }
 
     _deletedLocalIds.add(room.localId);
+    _batchPollTimers.remove(room.localId)?.cancel();
     try {
       final backendId = room.backendId;
       if (backendId != null && backendId.isNotEmpty) {
@@ -212,11 +238,232 @@ class MeetingsController extends ChangeNotifier {
     }
   }
 
+  Future<void> startBatchTranscription({
+    required bool useSavedRecording,
+  }) async {
+    final room = selectedRoom;
+    if (room == null || isStartingBatch) return;
+    final targetLocalId = room.localId;
+    if (_activeRecordingLocalId != null) {
+      errorMessage = '진행 중인 실시간 녹음을 먼저 종료해 주세요.';
+      notifyListeners();
+      return;
+    }
+    if (room.batchJobId != null && _isBatchProcessing(room.status)) {
+      errorMessage = '이미 배치 작업이 진행 중입니다.';
+      notifyListeners();
+      return;
+    }
+
+    isStartingBatch = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      final pickedRecording = useSavedRecording
+          ? room.recording
+          : await _audioFilePickerService.pickAudioFile();
+      if (pickedRecording == null) {
+        if (useSavedRecording) {
+          throw const AppException('이 회의방에 저장된 녹음 파일이 없습니다.');
+        }
+        statusMessage = '파일 선택을 취소했습니다.';
+        return;
+      }
+      if (pickedRecording.filePath.contains('://')) {
+        throw const AppException('실제 저장된 오디오 파일만 배치 업로드할 수 있습니다.');
+      }
+
+      final file = File(pickedRecording.filePath);
+      if (!await file.exists()) {
+        throw const AppException('선택한 녹음 파일을 찾을 수 없습니다.');
+      }
+      final extension = p
+          .extension(pickedRecording.fileName)
+          .replaceFirst('.', '')
+          .toLowerCase();
+      if (!_batchAudioExtensions.contains(extension)) {
+        throw AppException('지원하지 않는 오디오 형식입니다: .$extension');
+      }
+
+      final backendMeetingId = await _ensureBackendMeeting(room);
+      final uploadingRecording = pickedRecording.copyWith(
+        fileSizeBytes: await file.length(),
+      );
+      final uploading = room.copyWith(
+        backendId: backendMeetingId,
+        recording: uploadingRecording,
+        status: MeetingStatus.uploading,
+        updatedAt: DateTime.now(),
+        clearBatchError: true,
+      );
+      await _saveAndSelect(uploading, '녹음 파일 업로드 URL을 요청하고 있습니다.');
+
+      final uploadPayload = await _api.requestAudioUploadUrl(
+        backendMeetingId,
+        fileExtension: extension,
+        contentType: uploadingRecording.contentType,
+      );
+      final uploadUrl = uploadPayload['upload_url'];
+      final s3Key = uploadPayload['s3_key'];
+      if (uploadUrl is! String || uploadUrl.isEmpty || s3Key is! String) {
+        throw const AppException('백엔드 업로드 URL 응답이 올바르지 않습니다.');
+      }
+
+      await _api.uploadAudioFile(
+        uploadUrl,
+        filePath: uploadingRecording.filePath,
+        contentType: uploadingRecording.contentType,
+      );
+      final uploaded = uploading.copyWith(
+        recording: uploadingRecording.copyWith(audioS3Key: s3Key),
+        status: MeetingStatus.uploaded,
+        uploadedAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      await _saveAndSelect(uploaded, '녹음 파일 업로드가 완료되었습니다.');
+
+      final startPayload = await _api.startMeetingPipeline(backendMeetingId);
+      final jobId = startPayload['job_id'];
+      if (jobId is! String || jobId.isEmpty) {
+        throw const AppException('배치 작업 ID를 받지 못했습니다.');
+      }
+      final queued = uploaded.copyWith(
+        status: MeetingStatus.fromJson(startPayload['status'] as String?),
+        batchJobId: jobId,
+        updatedAt: DateTime.now(),
+      );
+      await _saveAndSelect(queued, '배치 전사 및 회의록 생성 작업이 대기 중입니다.');
+      _scheduleBatchPoll(queued.localId, immediate: true);
+    } catch (error) {
+      final current = await _repository.getRoom(targetLocalId) ?? room;
+      final failed = current.copyWith(
+        status: MeetingStatus.failed,
+        batchErrorMessage: _userMessage(error),
+        updatedAt: DateTime.now(),
+      );
+      await _saveKeepingSelection(failed, '배치 작업을 시작하지 못했습니다.');
+      errorMessage = _userMessage(error);
+    } finally {
+      isStartingBatch = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshBatchStatus() async {
+    final room = selectedRoom;
+    if (room == null || room.batchJobId == null) {
+      errorMessage = '조회할 배치 작업이 없습니다.';
+      notifyListeners();
+      return;
+    }
+    _batchPollTimers.remove(room.localId)?.cancel();
+    await _pollBatchJob(room.localId);
+  }
+
+  void _scheduleBatchPoll(String localId, {bool immediate = false}) {
+    _batchPollTimers.remove(localId)?.cancel();
+    if (immediate) {
+      unawaited(_pollBatchJob(localId));
+      return;
+    }
+    _batchPollTimers[localId] = Timer(
+      _batchPollInterval,
+      () => unawaited(_pollBatchJob(localId)),
+    );
+  }
+
+  Future<void> _pollBatchJob(String localId) async {
+    if (!_batchPollingLocalIds.add(localId)) return;
+    try {
+      final room = await _repository.getRoom(localId);
+      final jobId = room?.batchJobId;
+      final backendId = room?.backendId;
+      if (room == null || jobId == null || backendId == null) return;
+
+      final job = await _api.getJob(jobId);
+      final meeting = await _api.getMeeting(backendId);
+      final jobStatus = job['status'] as String?;
+      final meetingStatus = MeetingStatus.fromJson(
+        meeting['status'] as String?,
+      );
+      final polledRecording = room.recording?.copyWith(
+        audioS3Key: meeting['audio_s3_key'] as String?,
+        transcriptS3Key: meeting['transcript_s3_key'] as String?,
+      );
+      if (jobStatus == 'failed' || meetingStatus == MeetingStatus.failed) {
+        _batchPollTimers.remove(localId)?.cancel();
+        final message =
+            job['error_message'] as String? ??
+            meeting['error_message'] as String? ??
+            '배치 작업에 실패했습니다.';
+        await _saveKeepingSelection(
+          room.copyWith(
+            status: MeetingStatus.failed,
+            recording: polledRecording,
+            batchErrorMessage: message,
+            updatedAt: DateTime.now(),
+          ),
+          message,
+        );
+        return;
+      }
+
+      if (jobStatus == 'completed' ||
+          meetingStatus == MeetingStatus.completed) {
+        _batchPollTimers.remove(localId)?.cancel();
+        final result = await _api.getMeetingResult(backendId);
+        await _saveKeepingSelection(
+          room.copyWith(
+            status: MeetingStatus.completed,
+            recording: polledRecording,
+            summary: result['summary'] as String?,
+            minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
+            minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
+            pdfS3Key: result['pdf_s3_key'] as String?,
+            updatedAt: DateTime.now(),
+            clearBatchError: true,
+          ),
+          '배치 전사와 회의록 생성이 완료되었습니다.',
+        );
+        return;
+      }
+
+      await _saveKeepingSelection(
+        room.copyWith(
+          status: meetingStatus,
+          recording: polledRecording,
+          updatedAt: DateTime.now(),
+        ),
+        _messageFor(meetingStatus),
+      );
+      _scheduleBatchPoll(localId);
+    } catch (error) {
+      final room = await _repository.getRoom(localId);
+      if (room != null) {
+        await _saveKeepingSelection(
+          room.copyWith(
+            batchErrorMessage: _userMessage(error),
+            updatedAt: DateTime.now(),
+          ),
+          '상태 조회에 실패했습니다. 잠시 후 다시 시도합니다.',
+        );
+        _scheduleBatchPoll(localId);
+      }
+    } finally {
+      _batchPollingLocalIds.remove(localId);
+    }
+  }
+
   /// 마이크 권한을 확인한 뒤 backend WebSocket에 PCM 스트림을 전송합니다.
   Future<void> startRecording() async {
     final room = selectedRoom;
     if (room == null) return;
 
+    if (room.batchJobId != null && _isBatchProcessing(room.status)) {
+      errorMessage = '배치 처리 중인 회의방에서는 실시간 녹음을 시작할 수 없습니다.';
+      notifyListeners();
+      return;
+    }
     if (isRecordingAnotherRoom(room.localId)) {
       errorMessage =
           '${activeRecordingRoomTitle ?? '다른 회의방'}에서 녹음이 진행 중입니다. '
@@ -366,6 +613,11 @@ class MeetingsController extends ChangeNotifier {
   Future<void> generateMinutesFromRealtime() async {
     final room = selectedRoom;
     if (room == null) return;
+    if (room.batchJobId != null && _isBatchProcessing(room.status)) {
+      errorMessage = '배치 전사와 회의록 생성이 진행 중입니다. 완료 후 결과를 확인해 주세요.';
+      notifyListeners();
+      return;
+    }
 
     try {
       final backendMeetingId = await _ensureBackendMeeting(room);
@@ -634,6 +886,14 @@ class MeetingsController extends ChangeNotifier {
         status == MeetingStatus.transcribing;
   }
 
+  bool _isBatchProcessing(MeetingStatus status) {
+    return status == MeetingStatus.uploading ||
+        status == MeetingStatus.uploaded ||
+        status == MeetingStatus.queued ||
+        status == MeetingStatus.transcribing ||
+        status == MeetingStatus.summarizing;
+  }
+
   Future<void> _deleteLocalFile(String? path) async {
     if (path == null || path.isEmpty || path.contains('://')) return;
     final file = File(path);
@@ -699,6 +959,9 @@ class MeetingsController extends ChangeNotifier {
 
   @override
   void dispose() {
+    for (final timer in _batchPollTimers.values) {
+      timer.cancel();
+    }
     unawaited(_audioSubscription?.cancel());
     unawaited(_transcriptionSubscription?.cancel());
     unawaited(_audioStreamingService.dispose());
@@ -716,3 +979,14 @@ const _debugTexts = [
   '된 건가?',
   '실시간 변환 테스트 이벤트입니다.',
 ];
+
+const _batchAudioExtensions = {
+  'm4a',
+  'mp3',
+  'mp4',
+  'wav',
+  'flac',
+  'ogg',
+  'amr',
+  'webm',
+};
