@@ -60,12 +60,18 @@ Implemented slices:
 - Match the backend mobile mockup's local minutes flow state: `uploading` while requesting minutes and `uploaded` after S3 minutes artifacts are returned.
 - Save final transcript text to a local txt file when leaving a room.
 - Best-effort save an encoded `m4a` recording file for playback/upload while realtime PCM streaming is active.
+- Bind each active recording/WebSocket session to the room that started it, so
+  background transcript events cannot be stored in another selected room.
+- Block starting a second room recording while another room owns the active
+  recording session, with an explicit user-facing notice.
 
 Remaining out of scope:
 - Real SQLite schema migration.
 - Real WebSocket server integration test on device/emulator.
 - Real S3 upload completion flow for recording assets.
 - Platform confirmation that simultaneous PCM streaming and encoded file recording is stable on all target iOS/Android devices.
+- Batch transcript source download/view APIs; the current backend exposes batch
+  status/results and PDF download, but not the raw transcript artifact.
 
 ## Mobile Mockup Parity Check
 

@@ -27,6 +27,29 @@ Flutter App
   -> receive minutes_json_s3_key / minutes_markdown_s3_key / pdf_s3_key
 ```
 
+실시간 녹음 세션은 녹음을 시작한 로컬 회의방에 고정됩니다. 녹음 중 목록으로
+돌아가 다른 회의방을 열어도 WebSocket 전사 이벤트와 저장용 녹음 파일은 시작한
+회의방에만 연결되며, 해당 녹음을 종료하기 전에는 다른 회의방에서 새 녹음을
+시작할 수 없습니다.
+
+## Batch Flow
+
+백엔드는 배치 업로드 계약을 제공하지만 Flutter의 전체 UI 흐름은 단계적으로
+연결 중입니다.
+
+```text
+Saved audio file
+  -> POST /meetings/{id}/upload-url
+  -> PUT audio bytes to the presigned URL
+  -> POST /meetings/{id}/start
+  -> poll GET /jobs/{job_id}
+  -> GET /meetings/{id}/result
+```
+
+현재 백엔드 `/start`는 배치 전사 완료 후 회의록 생성까지 이어서 실행합니다.
+배치 전사문 원문 조회처럼 아직 백엔드 API가 없는 기능은 앱에서 지원 예정 안내로
+표시합니다.
+
 ## Android Team Run
 
 Android 팀원 실행 가이드는 다음 문서를 참고합니다.

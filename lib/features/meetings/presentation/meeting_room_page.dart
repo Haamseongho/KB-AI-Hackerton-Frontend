@@ -41,6 +41,9 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
 
     final isPaused = room.status == MeetingStatus.paused;
     final isRecording = room.status == MeetingStatus.recording;
+    final isAnotherRoomRecording = _controller.isRecordingAnotherRoom(
+      room.localId,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -91,10 +94,19 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
             if (_controller.errorMessage != null)
               _Notice(text: _controller.errorMessage!, isError: true),
             if (_controller.errorMessage != null) const SizedBox(height: 12),
+            if (isAnotherRoomRecording)
+              _Notice(
+                text:
+                    '${_controller.activeRecordingRoomTitle ?? '다른 회의방'}에서 '
+                    '백그라운드 녹음이 진행 중입니다. 녹음과 전사 기록은 시작한 회의방에만 저장됩니다.',
+              ),
+            if (isAnotherRoomRecording) const SizedBox(height: 12),
             _ControlRow(
               isRecording: isRecording,
               isPaused: isPaused,
-              onRecord: _controller.startRecording,
+              onRecord: isAnotherRoomRecording
+                  ? null
+                  : _controller.startRecording,
               onPause: isRecording ? _controller.pauseRecording : null,
               onTestEvent: _controller.debugMode
                   ? _controller.appendDebugTranscript
@@ -399,7 +411,7 @@ class _ControlRow extends StatelessWidget {
 
   final bool isRecording;
   final bool isPaused;
-  final VoidCallback onRecord;
+  final VoidCallback? onRecord;
   final VoidCallback? onPause;
   final VoidCallback? onTestEvent;
   final VoidCallback onLeave;

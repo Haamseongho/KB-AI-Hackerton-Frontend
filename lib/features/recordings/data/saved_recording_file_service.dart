@@ -26,7 +26,14 @@ class SavedRecordingFileService {
     required String meetingId,
     required String title,
   }) async {
-    if (await _recorder.isRecording()) return;
+    if (await _recorder.isRecording()) {
+      if (_meetingId == meetingId) return;
+      throw StateError('다른 회의방의 녹음 파일을 저장 중입니다.');
+    }
+
+    if (_path != null && _meetingId != null && _meetingId != meetingId) {
+      throw StateError('다른 회의방의 녹음을 먼저 종료해 주세요.');
+    }
 
     if (_path != null &&
         _meetingId == meetingId &&

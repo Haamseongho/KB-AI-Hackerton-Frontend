@@ -20,6 +20,14 @@ class InMemoryMeetingRepository implements MeetingRepository {
   }
 
   @override
+  Future<MeetingRoom?> getRoom(String localId) async {
+    for (final room in _rooms) {
+      if (room.localId == localId) return room;
+    }
+    return null;
+  }
+
+  @override
   Future<MeetingRoom> saveRoom(MeetingRoom room) async {
     final index = _rooms.indexWhere((item) => item.localId == room.localId);
     if (index == -1) {

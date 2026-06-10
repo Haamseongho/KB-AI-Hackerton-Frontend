@@ -57,6 +57,19 @@ class SqliteMeetingRepository implements MeetingRepository {
   }
 
   @override
+  Future<MeetingRoom?> getRoom(String localId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'meetings',
+      where: 'local_id = ?',
+      whereArgs: [localId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _roomFromRow(db, rows.single);
+  }
+
+  @override
   Future<MeetingRoom> saveRoom(MeetingRoom room) async {
     final db = await _db;
     await db.transaction((txn) async {

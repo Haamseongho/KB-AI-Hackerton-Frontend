@@ -58,6 +58,8 @@ class MeetingsController extends ChangeNotifier {
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<TranscriptionEvent>? _transcriptionSubscription;
   DateTime? _streamStartedAt;
+  String? _activeRecordingLocalId;
+  Future<void> _transcriptionEventQueue = Future.value();
   final Map<String, Future<String>> _backendCreateFutures = {};
   final Set<String> _deletedLocalIds = {};
 
@@ -69,6 +71,22 @@ class MeetingsController extends ChangeNotifier {
   bool isLoading = false;
   bool isDownloadingPdf = false;
   bool debugMode = true;
+
+  String? get activeRecordingLocalId => _activeRecordingLocalId;
+
+  bool isRecordingAnotherRoom(String localId) {
+    final activeLocalId = _activeRecordingLocalId;
+    return activeLocalId != null && activeLocalId != localId;
+  }
+
+  String? get activeRecordingRoomTitle {
+    final activeLocalId = _activeRecordingLocalId;
+    if (activeLocalId == null) return null;
+    for (final room in rooms) {
+      if (room.localId == activeLocalId) return room.title;
+    }
+    return null;
+  }
 
   /// 저장된 회의방 목록을 현재 검색어 기준으로 다시 불러옵니다.
   Future<void> loadRooms() async {
@@ -199,6 +217,14 @@ class MeetingsController extends ChangeNotifier {
     final room = selectedRoom;
     if (room == null) return;
 
+    if (isRecordingAnotherRoom(room.localId)) {
+      errorMessage =
+          '${activeRecordingRoomTitle ?? '다른 회의방'}에서 녹음이 진행 중입니다. '
+          '해당 회의방의 녹음을 먼저 종료해 주세요.';
+      notifyListeners();
+      return;
+    }
+
     final granted = await _permissionService.ensureGranted();
     if (!granted) {
       errorMessage = '마이크 권한이 필요합니다.';
@@ -206,6 +232,8 @@ class MeetingsController extends ChangeNotifier {
       return;
     }
 
+    final isNewSession = _activeRecordingLocalId == null;
+    _activeRecordingLocalId = room.localId;
     await _stopRealtimeStream(controlType: 'stop');
 
     try {
@@ -225,6 +253,9 @@ class MeetingsController extends ChangeNotifier {
       );
     } catch (error) {
       await _stopRealtimeStream(controlType: 'stop');
+      if (isNewSession) {
+        _activeRecordingLocalId = null;
+      }
       final failed = (selectedRoom ?? room).copyWith(
         status: MeetingStatus.paused,
         updatedAt: DateTime.now(),
@@ -254,6 +285,11 @@ class MeetingsController extends ChangeNotifier {
   Future<void> pauseRecording() async {
     final room = selectedRoom;
     if (room == null) return;
+    if (_activeRecordingLocalId != room.localId) {
+      errorMessage = '현재 회의방에서 진행 중인 녹음이 없습니다.';
+      notifyListeners();
+      return;
+    }
 
     await _stopRealtimeStream(controlType: 'pause');
     await _pauseSavedRecording();
@@ -270,6 +306,12 @@ class MeetingsController extends ChangeNotifier {
   Future<void> leaveRoom() async {
     final room = selectedRoom;
     if (room == null) return;
+    if (_activeRecordingLocalId != null &&
+        _activeRecordingLocalId != room.localId) {
+      errorMessage = '${activeRecordingRoomTitle ?? '다른 회의방'}에서 녹음이 진행 중입니다.';
+      notifyListeners();
+      return;
+    }
 
     await _stopRealtimeStream(controlType: 'stop');
     final recordingAsset = await _stopSavedRecording(room);
@@ -290,6 +332,8 @@ class MeetingsController extends ChangeNotifier {
       clearPartialTranscript: true,
     );
     await _saveAndSelect(updated, '녹음 파일과 대화록이 로컬에 저장되었습니다.');
+    _activeRecordingLocalId = null;
+    notifyListeners();
   }
 
   /// 백엔드 연동 전에도 UI 흐름을 검증할 수 있도록 final transcript를 추가합니다.
@@ -445,26 +489,35 @@ class MeetingsController extends ChangeNotifier {
   /// WebSocket 이벤트 스트림을 controller 상태 변경으로 변환합니다.
   void _listenToTranscriptionEvents() {
     unawaited(_transcriptionSubscription?.cancel());
-    _transcriptionSubscription = _transcriptionSocketClient.events.listen(
-      _handleTranscriptionEvent,
-    );
+    _transcriptionSubscription = _transcriptionSocketClient.events.listen((
+      event,
+    ) {
+      _transcriptionEventQueue = _transcriptionEventQueue.then(
+        (_) => _handleTranscriptionEvent(event),
+      );
+    });
   }
 
   /// backend에서 받은 status/partial/final/error 이벤트를 UI 모델에 반영합니다.
-  void _handleTranscriptionEvent(TranscriptionEvent event) {
-    final room = selectedRoom;
+  Future<void> _handleTranscriptionEvent(TranscriptionEvent event) async {
+    final activeLocalId = _activeRecordingLocalId;
+    if (activeLocalId == null) return;
+    final room = await _repository.getRoom(activeLocalId);
     if (room == null) return;
+    final isActiveRoomSelected = selectedRoom?.localId == activeLocalId;
 
     switch (event) {
       case TranscriptionStatusEvent():
-        statusMessage = event.message;
-        notifyListeners();
+        if (isActiveRoomSelected) {
+          statusMessage = event.message;
+          notifyListeners();
+        }
       case PartialTranscriptEvent():
         final updated = room.copyWith(
           partialTranscript: event.text,
           updatedAt: DateTime.now(),
         );
-        unawaited(_saveAndSelect(updated, event.text));
+        await _saveKeepingSelection(updated, event.text);
       case FinalTranscriptEvent():
         final segment = _withElapsedFallback(event.segment);
         final updated = room.copyWith(
@@ -472,11 +525,27 @@ class MeetingsController extends ChangeNotifier {
           updatedAt: DateTime.now(),
           clearPartialTranscript: true,
         );
-        unawaited(_saveAndSelect(updated, '최종 대화록을 받았습니다.'));
+        await _saveKeepingSelection(updated, '최종 대화록을 받았습니다.');
       case TranscriptionErrorEvent():
-        errorMessage = event.message;
-        notifyListeners();
+        if (isActiveRoomSelected) {
+          errorMessage = event.message;
+          notifyListeners();
+        }
     }
+  }
+
+  Future<void> _saveKeepingSelection(
+    MeetingRoom room,
+    String activeRoomMessage,
+  ) async {
+    final selectedLocalId = selectedRoom?.localId;
+    final saved = await _repository.saveRoom(room);
+    rooms = await _repository.listRooms(query: query);
+    if (selectedLocalId == room.localId) {
+      selectedRoom = saved;
+      statusMessage = activeRoomMessage;
+    }
+    notifyListeners();
   }
 
   /// backend가 timestamp를 주지 않는 경우 앱 기준 경과 시간을 보완합니다.
