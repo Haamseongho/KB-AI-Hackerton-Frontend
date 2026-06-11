@@ -77,11 +77,22 @@ void main() {
 
     final saved = await repository.getRoom(room.localId);
     expect(api.uploadedFilePath, audioFile.path);
+    expect(api.uploadConfirmed, isTrue);
     expect(saved?.recording?.audioS3Key, 'audio/backend-batch/original.m4a');
     expect(saved?.batchJobId, 'job-batch');
     expect(saved?.status, MeetingStatus.completed);
     expect(saved?.summary, '배치 회의 요약');
+    expect(saved?.decisions, ['배치 처리 방식을 확정합니다.']);
+    expect(saved?.openIssues, ['실기기 성능 검증이 필요합니다.']);
+    expect(saved?.actionItems.single['owner'], '참가자1');
     expect(saved?.pdfS3Key, 'pdf/backend-batch/minutes.pdf');
+  });
+
+  test('keeps queued state when start response contains an unknown status', () {
+    expect(
+      MeetingStatus.fromJson('running', fallback: MeetingStatus.queued),
+      MeetingStatus.queued,
+    );
   });
 }
 
@@ -95,6 +106,7 @@ Future<void> _waitFor(Future<bool> Function() condition) async {
 
 class _FakeBatchMeetingApi extends MeetingApi {
   String? uploadedFilePath;
+  bool uploadConfirmed = false;
 
   @override
   Future<Map<String, dynamic>> requestAudioUploadUrl(
@@ -119,9 +131,25 @@ class _FakeBatchMeetingApi extends MeetingApi {
   }
 
   @override
+  Future<Map<String, dynamic>> confirmAudioUpload(
+    String backendMeetingId,
+  ) async {
+    uploadConfirmed = true;
+    return {
+      'meeting_id': backendMeetingId,
+      'status': 'uploaded',
+      'audio_s3_key': 'audio/$backendMeetingId/original.m4a',
+      'uploaded': true,
+    };
+  }
+
+  @override
   Future<Map<String, dynamic>> startMeetingPipeline(
     String backendMeetingId,
   ) async {
+    if (!uploadConfirmed) {
+      throw StateError('Upload must be confirmed before start.');
+    }
     return {
       'meeting_id': backendMeetingId,
       'job_id': 'job-batch',
@@ -145,6 +173,16 @@ class _FakeBatchMeetingApi extends MeetingApi {
       'meeting_id': backendMeetingId,
       'status': 'completed',
       'summary': '배치 회의 요약',
+      'decisions': ['배치 처리 방식을 확정합니다.'],
+      'open_issues': ['실기기 성능 검증이 필요합니다.'],
+      'action_items': [
+        {
+          'owner': '참가자1',
+          'task': '실기기 테스트',
+          'due_date': '금요일',
+          'resolved': 'false',
+        },
+      ],
       'minutes_json_s3_key': 'minutes/$backendMeetingId/minutes.json',
       'minutes_markdown_s3_key': 'minutes/$backendMeetingId/minutes.md',
       'pdf_s3_key': 'pdf/$backendMeetingId/minutes.pdf',

@@ -133,7 +133,7 @@ class TranscriptionSocketClient {
                   (decoded['segment_seq'] as int?)?.toString() ??
                   DateTime.now().microsecondsSinceEpoch.toString(),
               text: decoded['transcript_text'] as String? ?? '',
-              speaker: decoded['speaker_label'] as String? ?? '화자 1',
+              speaker: decoded['speaker_label'] as String?,
               startedAt: Duration(
                 milliseconds:
                     _intValue(decoded['start_time_ms']) ??

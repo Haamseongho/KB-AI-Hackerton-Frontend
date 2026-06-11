@@ -124,15 +124,25 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
             _BatchTranscriptionPanel(
               room: room,
               isStarting: _controller.isStartingBatch,
+              isDownloadingTranscript: _controller.isDownloadingTranscript,
               onStart: _showBatchDialog,
               onRefresh: _controller.refreshBatchStatus,
+              onOpenTranscript: () =>
+                  _controller.downloadAndOpenTranscript(batch: true),
             ),
             const SizedBox(height: 18),
             _MinutesResources(
               summary: room.summary,
+              decisions: room.decisions,
+              openIssues: room.openIssues,
+              actionItems: room.actionItems,
               minutesMarkdownS3Key: room.minutesMarkdownS3Key,
               pdfS3Key: room.pdfS3Key,
               isDownloadingPdf: _controller.isDownloadingPdf,
+              isDownloadingTranscript: _controller.isDownloadingTranscript,
+              canDownloadRealtimeTranscript: room.segments.isNotEmpty,
+              onDownloadRealtimeTranscript: () =>
+                  _controller.downloadAndOpenTranscript(batch: false),
               onDownloadPdf: _controller.downloadAndOpenPdf,
             ),
           ],
@@ -246,14 +256,18 @@ class _BatchTranscriptionPanel extends StatelessWidget {
   const _BatchTranscriptionPanel({
     required this.room,
     required this.isStarting,
+    required this.isDownloadingTranscript,
     required this.onStart,
     required this.onRefresh,
+    required this.onOpenTranscript,
   });
 
   final MeetingRoom room;
   final bool isStarting;
+  final bool isDownloadingTranscript;
   final VoidCallback onStart;
   final VoidCallback onRefresh;
+  final VoidCallback onOpenTranscript;
 
   @override
   Widget build(BuildContext context) {
@@ -287,13 +301,13 @@ class _BatchTranscriptionPanel extends StatelessWidget {
                 ),
                 FilledButton.icon(
                   onPressed: isStarting || isProcessing ? null : onStart,
-                  icon: isStarting
+                  icon: isStarting || isProcessing
                       ? const SizedBox.square(
                           dimension: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.cloud_upload_outlined),
-                  label: Text(isStarting ? '준비 중' : '배치 시작'),
+                  label: Text(_actionLabel(room.status)),
                 ),
               ],
             ),
@@ -323,6 +337,20 @@ class _BatchTranscriptionPanel extends StatelessWidget {
                 ],
               ),
             ],
+            if (room.status == MeetingStatus.completed &&
+                room.recording?.transcriptS3Key != null) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isDownloadingTranscript ? null : onOpenTranscript,
+                  icon: const Icon(Icons.description_outlined),
+                  label: Text(
+                    isDownloadingTranscript ? '전사문 다운로드 중' : '배치 전사문 열기',
+                  ),
+                ),
+              ),
+            ],
             if (room.batchErrorMessage != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -332,8 +360,7 @@ class _BatchTranscriptionPanel extends StatelessWidget {
             ],
             const SizedBox(height: 10),
             Text(
-              '배치 전사 원문 조회는 현재 백엔드 API가 없어 앱에서 제공하지 않습니다. '
-              '처리가 완료되면 요약과 PDF 회의록을 확인할 수 있습니다.',
+              '배치 전사 완료 후 전사문 TXT와 PDF 회의록을 확인할 수 있습니다.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -354,6 +381,19 @@ class _BatchTranscriptionPanel extends StatelessWidget {
     };
   }
 
+  String _actionLabel(MeetingStatus status) {
+    if (isStarting) {
+      return status == MeetingStatus.uploading ? '업로드 중' : '시작 중';
+    }
+    return switch (status) {
+      MeetingStatus.uploading => '업로드 중',
+      MeetingStatus.uploaded || MeetingStatus.queued => '작업 대기 중',
+      MeetingStatus.transcribing => '전사 중',
+      MeetingStatus.summarizing => '요약 중',
+      _ => '배치 시작',
+    };
+  }
+
   String _fileSize(int? bytes) {
     if (bytes == null || bytes <= 0) return '크기 정보 없음';
     final megabytes = bytes / (1024 * 1024);
@@ -364,21 +404,39 @@ class _BatchTranscriptionPanel extends StatelessWidget {
 class _MinutesResources extends StatelessWidget {
   const _MinutesResources({
     required this.summary,
+    required this.decisions,
+    required this.openIssues,
+    required this.actionItems,
     required this.minutesMarkdownS3Key,
     required this.pdfS3Key,
     required this.isDownloadingPdf,
+    required this.isDownloadingTranscript,
+    required this.canDownloadRealtimeTranscript,
+    required this.onDownloadRealtimeTranscript,
     required this.onDownloadPdf,
   });
 
   final String? summary;
+  final List<String> decisions;
+  final List<String> openIssues;
+  final List<Map<String, dynamic>> actionItems;
   final String? minutesMarkdownS3Key;
   final String? pdfS3Key;
   final bool isDownloadingPdf;
+  final bool isDownloadingTranscript;
+  final bool canDownloadRealtimeTranscript;
+  final VoidCallback onDownloadRealtimeTranscript;
   final VoidCallback onDownloadPdf;
 
   @override
   Widget build(BuildContext context) {
-    if (summary == null && minutesMarkdownS3Key == null && pdfS3Key == null) {
+    if (summary == null &&
+        decisions.isEmpty &&
+        openIssues.isEmpty &&
+        actionItems.isEmpty &&
+        minutesMarkdownS3Key == null &&
+        pdfS3Key == null &&
+        !canDownloadRealtimeTranscript) {
       return const SizedBox.shrink();
     }
 
@@ -398,6 +456,36 @@ class _MinutesResources extends StatelessWidget {
               const SizedBox(height: 10),
               Text(summary!),
             ],
+            if (decisions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text(
+                '결정 사항',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              ...decisions.map((item) => Text('• $item')),
+            ],
+            if (openIssues.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text(
+                '미결 사항',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              ...openIssues.map((item) => Text('• $item')),
+            ],
+            if (actionItems.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text(
+                '후속 조치',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              ...actionItems.map(
+                (item) => Text(
+                  '• ${item['owner'] ?? '담당자 미정'}: '
+                  '${item['task'] ?? item['action'] ?? '-'}'
+                  '${item['due_date'] == null ? '' : ' · ${item['due_date']}'}',
+                ),
+              ),
+            ],
             if (minutesMarkdownS3Key != null) ...[
               const SizedBox(height: 10),
               Text('회의록: $minutesMarkdownS3Key'),
@@ -415,6 +503,21 @@ class _MinutesResources extends StatelessWidget {
                         )
                       : const Icon(Icons.download_outlined),
                   label: Text(isDownloadingPdf ? 'PDF 다운로드 중' : 'PDF 회의록 다운로드'),
+                ),
+              ),
+            ],
+            if (canDownloadRealtimeTranscript) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isDownloadingTranscript
+                      ? null
+                      : onDownloadRealtimeTranscript,
+                  icon: const Icon(Icons.description_outlined),
+                  label: Text(
+                    isDownloadingTranscript ? '전사문 다운로드 중' : '실시간 전사문 열기',
+                  ),
                 ),
               ),
             ],
@@ -548,7 +651,7 @@ class _TranscriptLine extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${_time(segment.startedAt)}   ${segment.speaker ?? '화자'}   ${segment.isFinal ? '최종' : '부분'}${segment.isLowConfidence ? ' · 낮은 신뢰도' : ''}',
+            _time(segment.startedAt),
             style: Theme.of(context).textTheme.labelSmall,
           ),
           const SizedBox(height: 4),

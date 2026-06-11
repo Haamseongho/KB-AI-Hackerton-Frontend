@@ -68,16 +68,17 @@ Implemented slices:
   processing.
 - Stream the selected file to the S3 presigned PUT URL without loading the
   entire recording into memory.
+- Confirm the uploaded S3 object through `/meetings/{meeting_id}/upload-confirm`
+  before starting the batch job.
 - Start `/meetings/{meeting_id}/start`, persist `job_id`, poll job/meeting
   status, restore active polling after app restart, and store completed result
-  metadata for PDF download.
+  metadata including decisions, open issues, and action items.
+- Download and open formatted realtime/batch transcript TXT files from the
+  backend transcript endpoints.
 
 Remaining out of scope:
-- Real SQLite schema migration.
 - Real WebSocket server integration test on device/emulator.
 - Platform confirmation that simultaneous PCM streaming and encoded file recording is stable on all target iOS/Android devices.
-- Batch transcript source download/view APIs; the current backend exposes batch
-  status/results and PDF download, but not the raw transcript artifact.
 
 ## Mobile Mockup Parity Check
 
@@ -113,10 +114,11 @@ The mockup now contains executable test logic, not only static UI. Flutter shoul
 3. REST upload and result rendering
    - Implemented: request a presigned upload URL for saved or selected audio.
    - Implemented: stream the recording file with `PUT`.
+   - Implemented: confirm S3 object existence through `/upload-confirm`.
    - Implemented: start the batch pipeline through `/meetings/{meeting_id}/start`.
    - Implemented: poll job/meeting status and fetch `/meetings/{meeting_id}/result`.
-   - Remaining: render decisions/action items and expose raw batch transcript
-     resources when backend download APIs are available.
+   - Implemented: render decisions/open issues/action items and open formatted
+     batch/realtime transcript TXT resources.
 
 4. Device integration test
    - Run backend locally and launch Flutter with `API_BASE_URL` / `WS_BASE_URL`.

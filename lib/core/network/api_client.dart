@@ -55,6 +55,20 @@ class ApiClient {
     return response.bodyBytes;
   }
 
+  Future<Uint8List> getPathBytes(String path) async {
+    final response = await _client
+        .get(_baseUrl.resolve(path))
+        .timeout(const Duration(minutes: 5));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AppException(
+        response.body.isEmpty
+            ? '파일 다운로드에 실패했습니다: ${response.statusCode}'
+            : response.body,
+      );
+    }
+    return response.bodyBytes;
+  }
+
   Future<void> putBytes(
     String url, {
     required Uint8List bytes,
@@ -86,12 +100,21 @@ class ApiClient {
     final request = http.StreamedRequest('PUT', Uri.parse(url))
       ..headers['Content-Type'] = contentType
       ..contentLength = await file.length();
-    await request.sink.addStream(file.openRead());
-    await request.sink.close();
 
-    final response = await _client
+    // Start the HTTP request before feeding a potentially large file. Writing
+    // the whole file first can block on stream backpressure indefinitely.
+    final responseFuture = _client
         .send(request)
         .timeout(const Duration(minutes: 10));
+    try {
+      await request.sink.addStream(file.openRead());
+      await request.sink.close();
+    } catch (_) {
+      await request.sink.close();
+      rethrow;
+    }
+
+    final response = await responseFuture;
     await response.stream.drain<void>();
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AppException('Presigned 업로드에 실패했습니다: ${response.statusCode}');

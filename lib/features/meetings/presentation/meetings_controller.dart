@@ -10,6 +10,7 @@ import '../../../core/websocket/transcription_socket_client.dart';
 import '../../recordings/data/realtime_audio_streaming_service.dart';
 import '../../recordings/data/audio_file_picker_service.dart';
 import '../../recordings/data/saved_recording_file_service.dart';
+import '../../transcription/data/transcript_download_service.dart';
 import '../../transcription/data/transcript_file_service.dart';
 import '../../meetings/data/meeting_api.dart';
 import '../../meetings/data/pdf_download_service.dart';
@@ -36,6 +37,7 @@ class MeetingsController extends ChangeNotifier {
     SavedRecordingFileService? savedRecordingFileService,
     AudioFilePickerService? audioFilePickerService,
     TranscriptFileService? transcriptFileService,
+    TranscriptDownloadService? transcriptDownloadService,
     PdfDownloadService? pdfDownloadService,
     Duration batchPollInterval = const Duration(seconds: 10),
   }) : _repository = repository,
@@ -51,6 +53,8 @@ class MeetingsController extends ChangeNotifier {
            audioFilePickerService ?? AudioFilePickerService(),
        _transcriptFileService =
            transcriptFileService ?? TranscriptFileService(),
+       _transcriptDownloadService =
+           transcriptDownloadService ?? TranscriptDownloadService(),
        _pdfDownloadService = pdfDownloadService ?? PdfDownloadService(),
        _batchPollInterval = batchPollInterval;
 
@@ -62,6 +66,7 @@ class MeetingsController extends ChangeNotifier {
   final SavedRecordingFileService _savedRecordingFileService;
   final AudioFilePickerService _audioFilePickerService;
   final TranscriptFileService _transcriptFileService;
+  final TranscriptDownloadService _transcriptDownloadService;
   final PdfDownloadService _pdfDownloadService;
   final Duration _batchPollInterval;
   StreamSubscription<Uint8List>? _audioSubscription;
@@ -81,6 +86,7 @@ class MeetingsController extends ChangeNotifier {
   String? errorMessage;
   bool isLoading = false;
   bool isDownloadingPdf = false;
+  bool isDownloadingTranscript = false;
   bool isStartingBatch = false;
   bool debugMode = true;
 
@@ -238,6 +244,42 @@ class MeetingsController extends ChangeNotifier {
     }
   }
 
+  Future<void> downloadAndOpenTranscript({required bool batch}) async {
+    final room = selectedRoom;
+    if (room == null) return;
+    final backendId = room.backendId;
+    if (backendId == null || backendId.isEmpty) {
+      errorMessage = '전사문을 조회할 백엔드 회의 ID가 없습니다.';
+      notifyListeners();
+      return;
+    }
+
+    isDownloadingTranscript = true;
+    errorMessage = null;
+    statusMessage = batch ? '배치 전사문을 다운로드하고 있습니다.' : '실시간 전사문을 다운로드하고 있습니다.';
+    notifyListeners();
+    try {
+      final bytes = batch
+          ? await _api.downloadBatchTranscript(backendId)
+          : await _api.downloadRealtimeTranscript(backendId);
+      final path = await _transcriptDownloadService.saveAndOpen(
+        meetingId: room.meetingId,
+        source: batch ? 'batch' : 'realtime',
+        bytes: bytes,
+      );
+      final updated = batch
+          ? room
+          : room.copyWith(transcriptFilePath: path, updatedAt: DateTime.now());
+      await _saveAndSelect(updated, '전사문을 저장하고 열었습니다.');
+    } catch (error) {
+      errorMessage = _userMessage(error);
+      notifyListeners();
+    } finally {
+      isDownloadingTranscript = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> startBatchTranscription({
     required bool useSavedRecording,
   }) async {
@@ -314,8 +356,17 @@ class MeetingsController extends ChangeNotifier {
         filePath: uploadingRecording.filePath,
         contentType: uploadingRecording.contentType,
       );
+      final confirmPayload = await _api.confirmAudioUpload(backendMeetingId);
+      if (confirmPayload['uploaded'] != true ||
+          confirmPayload['status'] != MeetingStatus.uploaded.value) {
+        throw const AppException('백엔드에서 녹음 파일 업로드를 확인하지 못했습니다.');
+      }
+      final confirmedS3Key = confirmPayload['audio_s3_key'];
+      if (confirmedS3Key is! String || confirmedS3Key.isEmpty) {
+        throw const AppException('업로드 확인 응답에 S3 키가 없습니다.');
+      }
       final uploaded = uploading.copyWith(
-        recording: uploadingRecording.copyWith(audioS3Key: s3Key),
+        recording: uploadingRecording.copyWith(audioS3Key: confirmedS3Key),
         status: MeetingStatus.uploaded,
         uploadedAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -328,7 +379,10 @@ class MeetingsController extends ChangeNotifier {
         throw const AppException('배치 작업 ID를 받지 못했습니다.');
       }
       final queued = uploaded.copyWith(
-        status: MeetingStatus.fromJson(startPayload['status'] as String?),
+        status: MeetingStatus.fromJson(
+          startPayload['status'] as String?,
+          fallback: MeetingStatus.queued,
+        ),
         batchJobId: jobId,
         updatedAt: DateTime.now(),
       );
@@ -383,9 +437,18 @@ class MeetingsController extends ChangeNotifier {
       final job = await _api.getJob(jobId);
       final meeting = await _api.getMeeting(backendId);
       final jobStatus = job['status'] as String?;
-      final meetingStatus = MeetingStatus.fromJson(
+      final backendMeetingStatus = MeetingStatus.fromJson(
         meeting['status'] as String?,
+        fallback: room.status,
       );
+      final meetingStatus =
+          jobStatus == 'running' &&
+              {
+                MeetingStatus.uploaded,
+                MeetingStatus.queued,
+              }.contains(backendMeetingStatus)
+          ? MeetingStatus.transcribing
+          : backendMeetingStatus;
       final polledRecording = room.recording?.copyWith(
         audioS3Key: meeting['audio_s3_key'] as String?,
         transcriptS3Key: meeting['transcript_s3_key'] as String?,
@@ -417,6 +480,9 @@ class MeetingsController extends ChangeNotifier {
             status: MeetingStatus.completed,
             recording: polledRecording,
             summary: result['summary'] as String?,
+            decisions: _stringList(result['decisions']),
+            openIssues: _stringList(result['open_issues']),
+            actionItems: _mapList(result['action_items']),
             minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
             minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
             pdfS3Key: result['pdf_s3_key'] as String?,
@@ -651,6 +717,9 @@ class MeetingsController extends ChangeNotifier {
         status: _statusAfterRealtimeMinutes(result),
         title: result['title'] as String?,
         summary: result['summary'] as String?,
+        decisions: _stringList(result['decisions']),
+        openIssues: _stringList(result['open_issues']),
+        actionItems: _mapList(result['action_items']),
         minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
         minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
         pdfS3Key: result['pdf_s3_key'] as String?,
@@ -816,7 +885,7 @@ class MeetingsController extends ChangeNotifier {
       startedAt: elapsed,
       endedAt: elapsed,
       isFinal: segment.isFinal,
-      speaker: segment.speaker ?? '화자 1',
+      speaker: segment.speaker,
       confidenceScore: segment.confidenceScore,
       isLowConfidence: segment.isLowConfidence,
     );
@@ -955,6 +1024,19 @@ class MeetingsController extends ChangeNotifier {
   String _userMessage(Object error) {
     if (error is AppException) return error.message;
     return '요청에 실패했습니다. 서버와 네트워크 상태를 확인해 주세요.';
+  }
+
+  List<String> _stringList(Object? value) {
+    if (value is! List) return const [];
+    return value.whereType<String>().toList(growable: false);
+  }
+
+  List<Map<String, dynamic>> _mapList(Object? value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
   }
 
   @override

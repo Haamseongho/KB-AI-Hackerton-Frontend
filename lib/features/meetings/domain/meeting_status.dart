@@ -22,10 +22,13 @@ enum MeetingStatus {
   final String value;
   final String label;
 
-  static MeetingStatus fromJson(String? value) {
+  static MeetingStatus fromJson(
+    String? value, {
+    MeetingStatus fallback = MeetingStatus.ready,
+  }) {
     return MeetingStatus.values.firstWhere(
       (status) => status.value == value,
-      orElse: () => MeetingStatus.ready,
+      orElse: () => fallback,
     );
   }
 }

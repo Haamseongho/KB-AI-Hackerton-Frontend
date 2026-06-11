@@ -28,6 +28,9 @@ class MeetingRoom {
     this.uploadedAt,
     this.batchJobId,
     this.batchErrorMessage,
+    this.decisions = const [],
+    this.openIssues = const [],
+    this.actionItems = const [],
   });
 
   final String localId;
@@ -53,6 +56,9 @@ class MeetingRoom {
   final DateTime? uploadedAt;
   final String? batchJobId;
   final String? batchErrorMessage;
+  final List<String> decisions;
+  final List<String> openIssues;
+  final List<Map<String, dynamic>> actionItems;
 
   MeetingRoom copyWith({
     String? localId,
@@ -80,6 +86,9 @@ class MeetingRoom {
     String? batchJobId,
     String? batchErrorMessage,
     bool clearBatchError = false,
+    List<String>? decisions,
+    List<String>? openIssues,
+    List<Map<String, dynamic>>? actionItems,
   }) {
     return MeetingRoom(
       localId: localId ?? this.localId,
@@ -109,6 +118,9 @@ class MeetingRoom {
       batchErrorMessage: clearBatchError
           ? null
           : batchErrorMessage ?? this.batchErrorMessage,
+      decisions: decisions ?? this.decisions,
+      openIssues: openIssues ?? this.openIssues,
+      actionItems: actionItems ?? this.actionItems,
     );
   }
 }

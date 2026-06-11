@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
@@ -16,7 +18,7 @@ class SqliteMeetingRepository implements MeetingRepository {
   SqliteMeetingRepository({Database? database}) : _database = database;
 
   static const _databaseName = 'voice_doc_flutter.db';
-  static const _databaseVersion = 3;
+  static const _databaseVersion = 4;
 
   Database? _database;
 
@@ -146,7 +148,10 @@ class SqliteMeetingRepository implements MeetingRepository {
         transcript_s3_key TEXT,
         recording_file_size_bytes INTEGER,
         batch_job_id TEXT,
-        batch_error_message TEXT
+        batch_error_message TEXT,
+        decisions_json TEXT,
+        open_issues_json TEXT,
+        action_items_json TEXT
       )
     ''');
 
@@ -195,6 +200,13 @@ class SqliteMeetingRepository implements MeetingRepository {
         'ALTER TABLE meetings ADD COLUMN batch_error_message TEXT',
       );
     }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE meetings ADD COLUMN decisions_json TEXT');
+      await db.execute('ALTER TABLE meetings ADD COLUMN open_issues_json TEXT');
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN action_items_json TEXT',
+      );
+    }
   }
 
   Map<String, Object?> _meetingRow(MeetingRoom room) {
@@ -231,6 +243,9 @@ class SqliteMeetingRepository implements MeetingRepository {
       'recording_file_size_bytes': recording?.fileSizeBytes,
       'batch_job_id': room.batchJobId,
       'batch_error_message': room.batchErrorMessage,
+      'decisions_json': jsonEncode(room.decisions),
+      'open_issues_json': jsonEncode(room.openIssues),
+      'action_items_json': jsonEncode(room.actionItems),
     };
   }
 
@@ -289,6 +304,9 @@ class SqliteMeetingRepository implements MeetingRepository {
       uploadedAt: _dateTimeOrNull(row['uploaded_at'] as String?),
       batchJobId: row['batch_job_id'] as String?,
       batchErrorMessage: row['batch_error_message'] as String?,
+      decisions: _stringListFromJson(row['decisions_json'] as String?),
+      openIssues: _stringListFromJson(row['open_issues_json'] as String?),
+      actionItems: _mapListFromJson(row['action_items_json'] as String?),
     );
   }
 
@@ -342,6 +360,31 @@ class SqliteMeetingRepository implements MeetingRepository {
     if (value is int) return value.toDouble();
     if (value is double) return value;
     return null;
+  }
+
+  List<String> _stringListFromJson(String? value) {
+    if (value == null || value.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is! List) return const [];
+      return decoded.whereType<String>().toList(growable: false);
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  List<Map<String, dynamic>> _mapListFromJson(String? value) {
+    if (value == null || value.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is! List) return const [];
+      return decoded
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+    } on FormatException {
+      return const [];
+    }
   }
 
   String _dateText(DateTime date) {

@@ -66,6 +66,20 @@ class MeetingApi {
     );
   }
 
+  Future<Map<String, dynamic>> confirmAudioUpload(String backendMeetingId) {
+    return _client.postJson('/meetings/$backendMeetingId/upload-confirm');
+  }
+
+  Future<Uint8List> downloadRealtimeTranscript(String backendMeetingId) {
+    return _client.getPathBytes(
+      '/meetings/$backendMeetingId/transcript/realtime',
+    );
+  }
+
+  Future<Uint8List> downloadBatchTranscript(String backendMeetingId) {
+    return _client.getPathBytes('/meetings/$backendMeetingId/transcript/batch');
+  }
+
   Future<Map<String, dynamic>> createMinutesFromRealtime(
     String backendMeetingId, {
     List<Map<String, Object?>>? segments,
