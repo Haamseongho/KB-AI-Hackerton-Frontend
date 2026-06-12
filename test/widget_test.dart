@@ -94,6 +94,8 @@ void main() {
     await tester.tap(find.text('실시간 전사 테스트'));
     await tester.pumpAndSettle();
 
+    expect(find.text('테스트'), findsNothing);
+    expect(find.text('나가기'), findsOneWidget);
     expect(find.text('자동 스크롤'), findsNothing);
     expect(find.text('최신 대화 상단 고정'), findsOneWidget);
 

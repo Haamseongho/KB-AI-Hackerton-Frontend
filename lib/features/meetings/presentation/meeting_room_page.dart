@@ -106,9 +106,6 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                   ? null
                   : _controller.startRecording,
               onPause: isRecording ? _controller.pauseRecording : null,
-              onTestEvent: _controller.debugMode
-                  ? _controller.appendDebugTranscript
-                  : null,
               onLeave: _showLeaveDialog,
             ),
             const SizedBox(height: 18),
@@ -668,7 +665,6 @@ class _ControlRow extends StatelessWidget {
     required this.isPaused,
     required this.onRecord,
     required this.onPause,
-    required this.onTestEvent,
     required this.onLeave,
   });
 
@@ -676,7 +672,6 @@ class _ControlRow extends StatelessWidget {
   final bool isPaused;
   final VoidCallback? onRecord;
   final VoidCallback? onPause;
-  final VoidCallback? onTestEvent;
   final VoidCallback onLeave;
 
   @override
@@ -701,17 +696,10 @@ class _ControlRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: FilledButton(
-            onPressed: onTestEvent,
-            style: FilledButton.styleFrom(backgroundColor: Colors.blue),
-            child: const Text('테스트'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FilledButton(
             onPressed: onLeave,
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF111827),
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
             ),
             child: const Text('나가기'),
           ),
