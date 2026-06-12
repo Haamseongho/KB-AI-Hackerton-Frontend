@@ -135,7 +135,8 @@ Current backend compatibility:
 - Render partial transcript immediately without committing it as final text.
 - Replace partial transcript when a newer partial arrives.
 - Append final transcript segments to the saved transcript stream.
-- Auto-scroll live transcript by default, with a visible on/off state.
+- Keep the newest partial/final transcript cell pinned at the top of the live
+  transcript list without a separate auto-scroll toggle.
 - Close the WebSocket cleanly when recording stops or the user leaves the room.
 - Pause behavior must match backend capability:
   - if backend supports `pause` / `resume`, send those control events.
@@ -503,7 +504,7 @@ Meeting Room detail:
 - Show backend/WebSocket status messages such as `Backend status: transcribing`, `Final transcript received`, and `Transcription is paused`.
 - Partial transcript should visibly update in place.
 - Final transcript should remain stable.
-- Footer shows live/paused/completed transcription state and auto-scroll status.
+- Footer shows the live/paused/completed transcription state.
 - Bottom controls include record, pause/resume, and leave room.
 - A `Test Event` control may exist only in debug/demo mode to append a fake transcript event while backend streaming is under development.
 

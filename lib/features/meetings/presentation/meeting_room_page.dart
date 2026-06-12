@@ -85,11 +85,8 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
             _LiveTranscriptPanel(
               statusMessage: _controller.statusMessage,
               isPaused: isPaused,
-              isRecording: isRecording,
-              autoScroll: room.autoScroll,
               segments: room.segments,
               partialTranscript: room.partialTranscript,
-              onAutoScrollChanged: _controller.toggleAutoScroll,
             ),
             const SizedBox(height: 18),
             if (_controller.errorMessage != null)
@@ -532,24 +529,19 @@ class _LiveTranscriptPanel extends StatelessWidget {
   const _LiveTranscriptPanel({
     required this.statusMessage,
     required this.isPaused,
-    required this.isRecording,
-    required this.autoScroll,
     required this.segments,
-    required this.onAutoScrollChanged,
     this.partialTranscript,
   });
 
   final String statusMessage;
   final bool isPaused;
-  final bool isRecording;
-  final bool autoScroll;
   final List<TranscriptSegment> segments;
   final String? partialTranscript;
-  final ValueChanged<bool> onAutoScrollChanged;
 
   @override
   Widget build(BuildContext context) {
     final statusColor = isPaused ? Colors.deepOrange : Colors.green;
+    final latestFirst = segments.reversed;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -560,25 +552,32 @@ class _LiveTranscriptPanel extends StatelessWidget {
               children: [
                 Text('실시간 STT', style: Theme.of(context).textTheme.labelLarge),
                 const Spacer(),
-                Checkbox(value: autoScroll, onChanged: _onAutoChanged),
-                const Text('자동 스크롤'),
+                Icon(Icons.vertical_align_top, size: 16, color: statusColor),
+                const SizedBox(width: 6),
+                Text(
+                  '최신 대화 상단 고정',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
               ],
             ),
-            Text(
-              isPaused ? '실시간 변환이 일시정지되었습니다.' : '실시간 변환이 진행 중입니다.',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(statusMessage),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Icon(Icons.circle, size: 8, color: statusColor),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    statusMessage,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             Container(
@@ -592,8 +591,8 @@ class _LiveTranscriptPanel extends StatelessWidget {
               child: segments.isEmpty && partialTranscript == null
                   ? const Center(child: Text('녹음을 시작하면 실시간 대화록이 여기에 표시됩니다.'))
                   : ListView(
+                      key: const ValueKey('live-transcript-list'),
                       children: [
-                        ...segments.map(_TranscriptLine.new),
                         if (partialTranscript != null)
                           Opacity(
                             opacity: 0.65,
@@ -604,10 +603,10 @@ class _LiveTranscriptPanel extends StatelessWidget {
                                 startedAt: Duration.zero,
                                 endedAt: Duration.zero,
                                 isFinal: false,
-                                speaker: '부분 결과',
                               ),
                             ),
                           ),
+                        ...latestFirst.map(_TranscriptLine.new),
                       ],
                     ),
             ),
@@ -630,11 +629,6 @@ class _LiveTranscriptPanel extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  void _onAutoChanged(bool? value) {
-    if (value == null) return;
-    onAutoScrollChanged(value);
   }
 }
 

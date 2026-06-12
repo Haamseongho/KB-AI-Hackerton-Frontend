@@ -736,16 +736,6 @@ class MeetingsController extends ChangeNotifier {
   /// 기존 UI 콜백과의 호환을 위한 별칭입니다. 실제 동작은 회의록 생성입니다.
   Future<void> requestUpload() => generateMinutesFromRealtime();
 
-  /// transcript 패널의 자동 스크롤 상태를 저장합니다.
-  void toggleAutoScroll(bool value) {
-    final room = selectedRoom;
-    if (room == null) return;
-    final updated = room.copyWith(autoScroll: value);
-    selectedRoom = updated;
-    notifyListeners();
-    unawaited(_repository.saveRoom(updated));
-  }
-
   /// 로컬 저장소에 room을 저장하고 현재 선택 상태와 목록을 동기화합니다.
   Future<void> _saveAndSelect(MeetingRoom room, String message) async {
     final saved = await _repository.saveRoom(room);
@@ -838,7 +828,7 @@ class MeetingsController extends ChangeNotifier {
           partialTranscript: event.text,
           updatedAt: DateTime.now(),
         );
-        await _saveKeepingSelection(updated, event.text);
+        await _saveKeepingSelection(updated);
       case FinalTranscriptEvent():
         final segment = _withElapsedFallback(event.segment);
         final updated = room.copyWith(
@@ -856,15 +846,17 @@ class MeetingsController extends ChangeNotifier {
   }
 
   Future<void> _saveKeepingSelection(
-    MeetingRoom room,
-    String activeRoomMessage,
-  ) async {
+    MeetingRoom room, [
+    String? activeRoomMessage,
+  ]) async {
     final selectedLocalId = selectedRoom?.localId;
     final saved = await _repository.saveRoom(room);
     rooms = await _repository.listRooms(query: query);
     if (selectedLocalId == room.localId) {
       selectedRoom = saved;
-      statusMessage = activeRoomMessage;
+      if (activeRoomMessage != null) {
+        statusMessage = activeRoomMessage;
+      }
     }
     notifyListeners();
   }
