@@ -27,6 +27,10 @@ class MeetingApi {
     return _client.getJson('/meetings/$backendMeetingId');
   }
 
+  Future<Map<String, dynamic>> getBatchStatus(String backendMeetingId) {
+    return _client.getJson('/meetings/$backendMeetingId/batch-status');
+  }
+
   Future<Map<String, dynamic>> getMeetingResult(String backendMeetingId) {
     return _client.getJson('/meetings/$backendMeetingId/result');
   }

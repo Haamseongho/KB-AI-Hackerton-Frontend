@@ -14,6 +14,7 @@ import '../../transcription/data/transcript_download_service.dart';
 import '../../transcription/data/transcript_file_service.dart';
 import '../../meetings/data/meeting_api.dart';
 import '../../meetings/data/pdf_download_service.dart';
+import '../domain/batch_transcription_status.dart';
 import '../domain/meeting_repository.dart';
 import '../domain/meeting_room.dart';
 import '../domain/meeting_status.dart';
@@ -336,6 +337,7 @@ class MeetingsController extends ChangeNotifier {
         recording: uploadingRecording,
         status: MeetingStatus.uploading,
         updatedAt: DateTime.now(),
+        clearBatchStatus: true,
         clearBatchError: true,
       );
       await _saveAndSelect(uploading, '녹음 파일 업로드 URL을 요청하고 있습니다.');
@@ -368,6 +370,7 @@ class MeetingsController extends ChangeNotifier {
       final uploaded = uploading.copyWith(
         recording: uploadingRecording.copyWith(audioS3Key: confirmedS3Key),
         status: MeetingStatus.uploaded,
+        batchStatus: BatchTranscriptionStatus.uploaded,
         uploadedAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -384,6 +387,7 @@ class MeetingsController extends ChangeNotifier {
           fallback: MeetingStatus.queued,
         ),
         batchJobId: jobId,
+        batchStatus: BatchTranscriptionStatus.queued,
         updatedAt: DateTime.now(),
       );
       await _saveAndSelect(queued, '배치 전사 및 회의록 생성 작업이 대기 중입니다.');
@@ -392,6 +396,7 @@ class MeetingsController extends ChangeNotifier {
       final current = await _repository.getRoom(targetLocalId) ?? room;
       final failed = current.copyWith(
         status: MeetingStatus.failed,
+        batchStatus: BatchTranscriptionStatus.failed,
         batchErrorMessage: _userMessage(error),
         updatedAt: DateTime.now(),
       );
@@ -434,27 +439,25 @@ class MeetingsController extends ChangeNotifier {
       final backendId = room?.backendId;
       if (room == null || jobId == null || backendId == null) return;
 
-      final job = await _api.getJob(jobId);
+      final batchStatusPayload = await _api.getBatchStatus(backendId);
       final meeting = await _api.getMeeting(backendId);
-      final jobStatus = job['status'] as String?;
-      final backendMeetingStatus = MeetingStatus.fromJson(
-        meeting['status'] as String?,
-        fallback: room.status,
+      final batchStatus = BatchTranscriptionStatus.fromCode(
+        batchStatusPayload['batch_status_code'],
       );
       final meetingStatus =
-          jobStatus == 'running' &&
-              {
-                MeetingStatus.uploaded,
-                MeetingStatus.queued,
-              }.contains(backendMeetingStatus)
-          ? MeetingStatus.transcribing
-          : backendMeetingStatus;
+          batchStatus?.meetingStatus ??
+          MeetingStatus.fromJson(
+            batchStatusPayload['status'] as String? ??
+                meeting['status'] as String?,
+            fallback: room.status,
+          );
       final polledRecording = room.recording?.copyWith(
         audioS3Key: meeting['audio_s3_key'] as String?,
         transcriptS3Key: meeting['transcript_s3_key'] as String?,
       );
-      if (jobStatus == 'failed' || meetingStatus == MeetingStatus.failed) {
+      if (meetingStatus == MeetingStatus.failed) {
         _batchPollTimers.remove(localId)?.cancel();
+        final job = await _api.getJob(jobId);
         final message =
             job['error_message'] as String? ??
             meeting['error_message'] as String? ??
@@ -462,6 +465,7 @@ class MeetingsController extends ChangeNotifier {
         await _saveKeepingSelection(
           room.copyWith(
             status: MeetingStatus.failed,
+            batchStatus: batchStatus ?? BatchTranscriptionStatus.failed,
             recording: polledRecording,
             batchErrorMessage: message,
             updatedAt: DateTime.now(),
@@ -471,13 +475,13 @@ class MeetingsController extends ChangeNotifier {
         return;
       }
 
-      if (jobStatus == 'completed' ||
-          meetingStatus == MeetingStatus.completed) {
+      if (meetingStatus == MeetingStatus.completed) {
         _batchPollTimers.remove(localId)?.cancel();
         final result = await _api.getMeetingResult(backendId);
         await _saveKeepingSelection(
           room.copyWith(
             status: MeetingStatus.completed,
+            batchStatus: batchStatus ?? BatchTranscriptionStatus.completed,
             recording: polledRecording,
             summary: result['summary'] as String?,
             decisions: _stringList(result['decisions']),
@@ -497,6 +501,7 @@ class MeetingsController extends ChangeNotifier {
       await _saveKeepingSelection(
         room.copyWith(
           status: meetingStatus,
+          batchStatus: batchStatus,
           recording: polledRecording,
           updatedAt: DateTime.now(),
         ),

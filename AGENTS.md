@@ -88,6 +88,12 @@ Run the FastAPI server and any required worker process for end-to-end local test
 
 Current backend compatibility:
 - The backend now implements both the batch REST flow and realtime WebSocket STT.
+- Batch progress polling uses `GET /meetings/{meeting_id}/batch-status`.
+- Flutter should use the response's meeting-level `batch_status_code` as the
+  user-facing source of truth: queued `1`, uploaded `2`, transcribing `3`,
+  summarizing `4`, completed `5`, failed `6`.
+- `job_batch_status_code` is optional operational/debug information and must
+  not override the meeting-level status in the Flutter UI.
 - Realtime endpoint: `WS /ws/meetings/{meeting_id}/transcribe`.
 - Realtime start/resume event uses `media_encoding`, `sample_rate`, `language_code`, and optional `vocabulary_name`.
 - Realtime transcript events are `transcript.partial`, `transcript.final`, `status`, and `error`.
@@ -472,7 +478,10 @@ Avoid building a marketing landing page as the first screen. The app should open
 
 ## UI / UX Reference
 
-The Flutter UI should follow the Vercel Next.js web frontend shown in the supplied screenshots.
+The final Flutter UI reference is the mobile layout of:
+`https://voicedoc-5qwtck45.manus.space/`
+
+Do not use mockups inside the backend repository as a UI reference.
 
 Core visual direction:
 - Clean mobile-first meeting workflow.

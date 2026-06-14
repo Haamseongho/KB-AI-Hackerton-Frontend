@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../meetings/domain/batch_transcription_status.dart';
 import '../../meetings/domain/meeting_room.dart';
 import '../../meetings/domain/meeting_status.dart';
 import '../../meetings/domain/transcript_segment.dart';
@@ -313,13 +314,17 @@ class _BatchTranscriptionPanel extends StatelessWidget {
             ),
             if (hasJob) ...[
               const SizedBox(height: 12),
-              LinearProgressIndicator(value: _progressFor(room.status)),
+              LinearProgressIndicator(
+                value: _progressFor(room.batchStatus, room.status),
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
                     child: Text(
-                      '${room.status.label} · Job ${room.batchJobId}',
+                      '${room.batchStatus?.label ?? room.status.label}'
+                      '${room.batchStatus == null ? '' : ' (코드 ${room.batchStatus!.code})'}'
+                      ' · Job ${room.batchJobId}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
@@ -363,7 +368,20 @@ class _BatchTranscriptionPanel extends StatelessWidget {
     );
   }
 
-  double? _progressFor(MeetingStatus status) {
+  double? _progressFor(
+    BatchTranscriptionStatus? batchStatus,
+    MeetingStatus status,
+  ) {
+    if (batchStatus != null) {
+      return switch (batchStatus) {
+        BatchTranscriptionStatus.uploaded => 0.3,
+        BatchTranscriptionStatus.queued => 0.45,
+        BatchTranscriptionStatus.transcribing => 0.7,
+        BatchTranscriptionStatus.summarizing => 0.9,
+        BatchTranscriptionStatus.completed => 1,
+        BatchTranscriptionStatus.failed => null,
+      };
+    }
     return switch (status) {
       MeetingStatus.uploading => 0.2,
       MeetingStatus.uploaded => 0.4,

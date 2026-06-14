@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../domain/batch_transcription_status.dart';
 import '../domain/meeting_repository.dart';
 import '../domain/meeting_room.dart';
 import '../domain/meeting_status.dart';
@@ -18,7 +19,7 @@ class SqliteMeetingRepository implements MeetingRepository {
   SqliteMeetingRepository({Database? database}) : _database = database;
 
   static const _databaseName = 'voice_doc_flutter.db';
-  static const _databaseVersion = 4;
+  static const _databaseVersion = 5;
 
   Database? _database;
 
@@ -148,6 +149,7 @@ class SqliteMeetingRepository implements MeetingRepository {
         transcript_s3_key TEXT,
         recording_file_size_bytes INTEGER,
         batch_job_id TEXT,
+        batch_status_code INTEGER,
         batch_error_message TEXT,
         decisions_json TEXT,
         open_issues_json TEXT,
@@ -207,6 +209,11 @@ class SqliteMeetingRepository implements MeetingRepository {
         'ALTER TABLE meetings ADD COLUMN action_items_json TEXT',
       );
     }
+    if (oldVersion < 5) {
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN batch_status_code INTEGER',
+      );
+    }
   }
 
   Map<String, Object?> _meetingRow(MeetingRoom room) {
@@ -242,6 +249,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       'transcript_s3_key': recording?.transcriptS3Key,
       'recording_file_size_bytes': recording?.fileSizeBytes,
       'batch_job_id': room.batchJobId,
+      'batch_status_code': room.batchStatus?.code,
       'batch_error_message': room.batchErrorMessage,
       'decisions_json': jsonEncode(room.decisions),
       'open_issues_json': jsonEncode(room.openIssues),
@@ -303,6 +311,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       pdfS3Key: row['pdf_s3_key'] as String?,
       uploadedAt: _dateTimeOrNull(row['uploaded_at'] as String?),
       batchJobId: row['batch_job_id'] as String?,
+      batchStatus: BatchTranscriptionStatus.fromCode(row['batch_status_code']),
       batchErrorMessage: row['batch_error_message'] as String?,
       decisions: _stringListFromJson(row['decisions_json'] as String?),
       openIssues: _stringListFromJson(row['open_issues_json'] as String?),

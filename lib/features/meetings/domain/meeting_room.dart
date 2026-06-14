@@ -1,3 +1,4 @@
+import 'batch_transcription_status.dart';
 import 'meeting_status.dart';
 import 'meeting_type.dart';
 import 'recording_asset.dart';
@@ -27,6 +28,7 @@ class MeetingRoom {
     this.pdfS3Key,
     this.uploadedAt,
     this.batchJobId,
+    this.batchStatus,
     this.batchErrorMessage,
     this.decisions = const [],
     this.openIssues = const [],
@@ -55,6 +57,7 @@ class MeetingRoom {
   final String? pdfS3Key;
   final DateTime? uploadedAt;
   final String? batchJobId;
+  final BatchTranscriptionStatus? batchStatus;
   final String? batchErrorMessage;
   final List<String> decisions;
   final List<String> openIssues;
@@ -84,6 +87,8 @@ class MeetingRoom {
     String? pdfS3Key,
     DateTime? uploadedAt,
     String? batchJobId,
+    BatchTranscriptionStatus? batchStatus,
+    bool clearBatchStatus = false,
     String? batchErrorMessage,
     bool clearBatchError = false,
     List<String>? decisions,
@@ -115,6 +120,7 @@ class MeetingRoom {
       pdfS3Key: pdfS3Key ?? this.pdfS3Key,
       uploadedAt: uploadedAt ?? this.uploadedAt,
       batchJobId: batchJobId ?? this.batchJobId,
+      batchStatus: clearBatchStatus ? null : batchStatus ?? this.batchStatus,
       batchErrorMessage: clearBatchError
           ? null
           : batchErrorMessage ?? this.batchErrorMessage,

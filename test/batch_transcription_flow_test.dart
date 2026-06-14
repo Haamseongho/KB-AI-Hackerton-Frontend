@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kb_ai_hackerton_frontend/core/websocket/transcription_socket_client.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/data/in_memory_meeting_repository.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/data/meeting_api.dart';
+import 'package:kb_ai_hackerton_frontend/features/meetings/domain/batch_transcription_status.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_room.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_status.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_type.dart';
@@ -78,8 +79,10 @@ void main() {
     final saved = await repository.getRoom(room.localId);
     expect(api.uploadedFilePath, audioFile.path);
     expect(api.uploadConfirmed, isTrue);
+    expect(api.batchStatusRequested, isTrue);
     expect(saved?.recording?.audioS3Key, 'audio/backend-batch/original.m4a');
     expect(saved?.batchJobId, 'job-batch');
+    expect(saved?.batchStatus, BatchTranscriptionStatus.completed);
     expect(saved?.status, MeetingStatus.completed);
     expect(saved?.summary, '배치 회의 요약');
     expect(saved?.decisions, ['배치 처리 방식을 확정합니다.']);
@@ -94,6 +97,18 @@ void main() {
       MeetingStatus.queued,
     );
   });
+
+  test('maps backend batch status codes to typed states', () {
+    expect(
+      BatchTranscriptionStatus.fromCode(3),
+      BatchTranscriptionStatus.transcribing,
+    );
+    expect(
+      BatchTranscriptionStatus.fromCode('5'),
+      BatchTranscriptionStatus.completed,
+    );
+    expect(BatchTranscriptionStatus.fromCode(99), isNull);
+  });
 }
 
 Future<void> _waitFor(Future<bool> Function() condition) async {
@@ -107,6 +122,7 @@ Future<void> _waitFor(Future<bool> Function() condition) async {
 class _FakeBatchMeetingApi extends MeetingApi {
   String? uploadedFilePath;
   bool uploadConfirmed = false;
+  bool batchStatusRequested = false;
 
   @override
   Future<Map<String, dynamic>> requestAudioUploadUrl(
@@ -163,8 +179,27 @@ class _FakeBatchMeetingApi extends MeetingApi {
   }
 
   @override
+  Future<Map<String, dynamic>> getBatchStatus(String backendMeetingId) async {
+    batchStatusRequested = true;
+    return {
+      'meeting_id': backendMeetingId,
+      'status': 'completed',
+      'batch_status_code': 5,
+      'synced': false,
+      'job_id': 'job-batch',
+      'job_status': 'completed',
+      'job_batch_status_code': 5,
+    };
+  }
+
+  @override
   Future<Map<String, dynamic>> getMeeting(String backendMeetingId) async {
-    return {'id': backendMeetingId, 'status': 'completed'};
+    return {
+      'id': backendMeetingId,
+      'status': 'queued',
+      'audio_s3_key': 'audio/$backendMeetingId/original.m4a',
+      'transcript_s3_key': 'transcript/$backendMeetingId/transcript.txt',
+    };
   }
 
   @override
