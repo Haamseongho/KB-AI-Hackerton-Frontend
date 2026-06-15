@@ -19,32 +19,38 @@ class RealtimeAudioStreamingService {
     int sampleRate = 16000,
     int channels = 1,
   }) async {
-    final supported = await _recorder.isEncoderSupported(
-      AudioEncoder.pcm16bits,
-    );
-    if (!supported) {
-      throw const AppException('현재 기기에서 실시간 PCM 녹음 스트림을 지원하지 않습니다.');
-    }
+    try {
+      final supported = await _recorder.isEncoderSupported(
+        AudioEncoder.pcm16bits,
+      );
+      if (!supported) {
+        throw const AppException('현재 기기에서 실시간 PCM 녹음 스트림을 지원하지 않습니다.');
+      }
 
-    return _recorder.startStream(
-      RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: sampleRate,
-        numChannels: channels,
-        echoCancel: true,
-        noiseSuppress: true,
-        autoGain: true,
-        streamBufferSize: 4096,
-        androidConfig: const AndroidRecordConfig(
-          // record 6.x의 foreground service로 백그라운드 마이크 캡처를 유지합니다.
-          // ignore: deprecated_member_use
-          service: AndroidService(
-            title: 'VoiceDoc 회의 녹음 중',
-            content: '실시간 대화록을 생성하고 있습니다.',
+      return await _recorder.startStream(
+        RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: sampleRate,
+          numChannels: channels,
+          echoCancel: true,
+          noiseSuppress: true,
+          autoGain: true,
+          streamBufferSize: 4096,
+          androidConfig: const AndroidRecordConfig(
+            // record 6.x의 foreground service로 백그라운드 마이크 캡처를 유지합니다.
+            // ignore: deprecated_member_use
+            service: AndroidService(
+              title: 'VoiceDoc 회의 녹음 중',
+              content: '실시간 대화록을 생성하고 있습니다.',
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } on AppException {
+      rethrow;
+    } catch (error) {
+      throw AppException('마이크 PCM 스트림을 시작하지 못했습니다: $error');
+    }
   }
 
   /// 현재 실행 중인 PCM 녹음 스트림을 중지합니다.

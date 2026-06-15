@@ -19,6 +19,7 @@ import '../domain/meeting_repository.dart';
 import '../domain/meeting_room.dart';
 import '../domain/meeting_status.dart';
 import '../domain/meeting_type.dart';
+import '../domain/meeting_workflow.dart';
 import '../domain/recording_asset.dart';
 import '../domain/transcript_segment.dart';
 import '../domain/transcription_event.dart';
@@ -132,7 +133,7 @@ class MeetingsController extends ChangeNotifier {
   Future<void> createRoom({
     required String title,
     required MeetingType meetingType,
-    required String storageType,
+    required String workflowType,
     String? notes,
   }) async {
     final now = DateTime.now();
@@ -145,6 +146,9 @@ class MeetingsController extends ChangeNotifier {
       status: MeetingStatus.ready,
       createdAt: now,
       updatedAt: now,
+      workflow: workflowType == MeetingWorkflow.batch.value
+          ? MeetingWorkflow.batch
+          : MeetingWorkflow.realtime,
       notes: notes,
     );
 
@@ -570,6 +574,7 @@ class MeetingsController extends ChangeNotifier {
         cancelOnError: true,
       );
     } catch (error) {
+      debugPrint('Realtime recording start failed: $error');
       await _stopRealtimeStream(controlType: 'stop');
       if (isNewSession) {
         _activeRecordingLocalId = null;

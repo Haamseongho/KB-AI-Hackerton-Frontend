@@ -1,23 +1,53 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kb_ai_hackerton_frontend/features/meetings/data/in_memory_meeting_repository.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_room.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_status.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_type.dart';
+import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_workflow.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/transcript_segment.dart';
 import 'package:kb_ai_hackerton_frontend/main.dart';
 
 void main() {
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+  });
+
   testWidgets('shows realtime meeting rooms workflow', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       VoiceDocApp(repository: InMemoryMeetingRepository()),
     );
     await tester.pump();
 
-    expect(find.text('회의방'), findsOneWidget);
-    expect(find.text('새 회의방'), findsOneWidget);
-    expect(find.text('아직 생성된 회의방이 없습니다.'), findsOneWidget);
-    expect(find.textContaining('PCM 오디오'), findsOneWidget);
+    expect(find.text('회의실'), findsOneWidget);
+    expect(find.text('새 회의실'), findsOneWidget);
+    expect(find.text('🔴 실시간'), findsOneWidget);
+    expect(find.text('📦 배치'), findsOneWidget);
+    expect(find.text('실시간 회의실이 없습니다.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('renders the create room sheet on a mobile viewport', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      VoiceDocApp(repository: InMemoryMeetingRepository()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('새 회의실'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('새 회의실 만들기'), findsOneWidget);
+    expect(find.text('자동 생성 ID'), findsOneWidget);
+    expect(find.text('🔴 실시간 STT'), findsOneWidget);
+    expect(find.text('📦 배치 전사'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('deletes a meeting room from the integrated delete menu', (
@@ -53,10 +83,52 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('삭제할 회의'), findsNothing);
-    expect(find.text('아직 생성된 회의방이 없습니다.'), findsOneWidget);
+    expect(find.text('실시간 회의실이 없습니다.'), findsOneWidget);
+  });
+
+  testWidgets('separates realtime and batch rooms', (tester) async {
+    final now = DateTime(2026, 6, 15);
+    final repository = InMemoryMeetingRepository(
+      rooms: [
+        MeetingRoom(
+          localId: 'local-realtime',
+          meetingId: 'MTG-20260615-001',
+          title: '실시간 회의',
+          meetingType: MeetingType.small,
+          status: MeetingStatus.ready,
+          createdAt: now,
+          updatedAt: now,
+        ),
+        MeetingRoom(
+          localId: 'local-batch',
+          meetingId: 'MTG-20260615-002',
+          title: '배치 회의',
+          meetingType: MeetingType.small,
+          workflow: MeetingWorkflow.batch,
+          status: MeetingStatus.ready,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(VoiceDocApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('실시간 회의'), findsOneWidget);
+    expect(find.text('배치 회의'), findsNothing);
+
+    await tester.tap(find.text('📦 배치'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('실시간 회의'), findsNothing);
+    expect(find.text('배치 회의'), findsOneWidget);
+    expect(find.text('배치 시작'), findsOneWidget);
   });
 
   testWidgets('pins the latest realtime transcript at the top', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final now = DateTime(2026, 6, 12);
     final repository = InMemoryMeetingRepository(
       rooms: [
@@ -102,6 +174,7 @@ void main() {
     final partialY = tester.getTopLeft(find.text('현재 말하는 내용')).dy;
     final latestY = tester.getTopLeft(find.text('최근 확정 문장')).dy;
     final olderY = tester.getTopLeft(find.text('이전 확정 문장')).dy;
+    expect(tester.takeException(), isNull);
     expect(partialY, lessThan(latestY));
     expect(latestY, lessThan(olderY));
   });

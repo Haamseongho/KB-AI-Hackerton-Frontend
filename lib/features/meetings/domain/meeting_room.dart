@@ -1,6 +1,7 @@
 import 'batch_transcription_status.dart';
 import 'meeting_status.dart';
 import 'meeting_type.dart';
+import 'meeting_workflow.dart';
 import 'recording_asset.dart';
 import 'transcript_segment.dart';
 
@@ -13,6 +14,7 @@ class MeetingRoom {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.workflow = MeetingWorkflow.realtime,
     this.backendId,
     this.notes,
     this.recording,
@@ -43,6 +45,7 @@ class MeetingRoom {
   final MeetingStatus status;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final MeetingWorkflow workflow;
   final String? notes;
   final RecordingAsset? recording;
   final String? summary;
@@ -72,6 +75,7 @@ class MeetingRoom {
     MeetingStatus? status,
     DateTime? createdAt,
     DateTime? updatedAt,
+    MeetingWorkflow? workflow,
     String? notes,
     RecordingAsset? recording,
     String? summary,
@@ -104,6 +108,7 @@ class MeetingRoom {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      workflow: workflow ?? this.workflow,
       notes: notes ?? this.notes,
       recording: recording ?? this.recording,
       summary: summary ?? this.summary,

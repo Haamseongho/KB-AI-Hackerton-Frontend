@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/config/app_config.dart';
+import '../../../core/theme/app_theme.dart';
 import '../domain/meeting_room.dart';
+import '../domain/meeting_status.dart';
+import '../domain/meeting_workflow.dart';
 import 'meeting_room_page.dart';
 import 'meetings_controller.dart';
 import 'widgets/create_room_sheet.dart';
@@ -18,6 +20,7 @@ class MeetingsPage extends StatefulWidget {
 
 class _MeetingsPageState extends State<MeetingsPage> {
   late final TextEditingController _searchController;
+  MeetingWorkflow _workflow = MeetingWorkflow.realtime;
 
   MeetingsController get _controller => widget.controller;
 
@@ -42,78 +45,112 @@ class _MeetingsPageState extends State<MeetingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final rooms = _controller.rooms
+        .where((room) => room.workflow == _workflow)
+        .toList(growable: false);
+
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '회의방',
-                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+              sliver: SliverList.list(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '회의실',
+                              style: Theme.of(context).textTheme.headlineLarge,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '${_controller.rooms.length}개의 회의실',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      FilledButton.icon(
+                        onPressed: _showCreateRoomSheet,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('새 회의실'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 42),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                FilledButton.icon(
-                  onPressed: _showCreateRoomSheet,
-                  icon: const Icon(Icons.add),
-                  label: const Text('새 회의방'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '서버 REST ${AppConfig.apiBaseUrl} · 실시간 WS ${AppConfig.wsBaseUrl}',
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: '회의 제목, meeting_id, 날짜 검색',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: _controller.search,
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text(
-                '회의방은 로컬에 저장됩니다. 회의방을 열고 녹음을 시작하면 PCM 오디오가 FastAPI로 전송됩니다.',
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(
+                        Icons.search,
+                        size: 20,
+                        color: AppTheme.muted,
+                      ),
+                      hintText: '회의실 이름 또는 ID 검색',
+                    ),
+                    onChanged: _controller.search,
+                  ),
+                  const SizedBox(height: 14),
+                  _WorkflowTabs(
+                    selected: _workflow,
+                    onChanged: (workflow) {
+                      setState(() => _workflow = workflow);
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                ],
               ),
             ),
-            const SizedBox(height: 20),
             if (_controller.isLoading)
-              const Center(child: CircularProgressIndicator())
-            else if (_controller.rooms.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: Text('아직 생성된 회의방이 없습니다.')),
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (rooms.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyRooms(workflow: _workflow),
               )
             else
-              ..._controller.rooms.map(
-                (room) => MeetingCard(
-                  room: room,
-                  onOpen: () => _openRoom(room),
-                  onBatch: () {
-                    _controller.selectRoom(room);
-                    _showBatchDialog();
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                sliver: SliverList.builder(
+                  itemCount: rooms.length,
+                  itemBuilder: (context, index) {
+                    final room = rooms[index];
+                    return MeetingCard(
+                      room: room,
+                      onOpen: () => _openRoom(room),
+                      onPrimaryAction: () => _primaryAction(room),
+                      onDelete: () => _confirmDelete(room),
+                    );
                   },
-                  onDelete: () => _confirmDelete(room),
                 ),
               ),
           ],
         ),
       ),
     );
+  }
+
+  void _primaryAction(MeetingRoom room) {
+    if (room.workflow == MeetingWorkflow.batch &&
+        room.batchJobId == null &&
+        room.status != MeetingStatus.completed) {
+      _controller.selectRoom(room);
+      _showBatchDialog();
+      return;
+    }
+    _openRoom(room);
   }
 
   void _openRoom(MeetingRoom room) {
@@ -130,6 +167,8 @@ class _MeetingsPageState extends State<MeetingsPage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      backgroundColor: Colors.white,
+      showDragHandle: false,
       builder: (_) => CreateRoomSheet(onCreate: _controller.createRoom),
     );
   }
@@ -142,9 +181,8 @@ class _MeetingsPageState extends State<MeetingsPage> {
         return AlertDialog(
           title: const Text('배치 전사를 시작할까요?'),
           content: Text(
-            '오디오 파일을 S3에 업로드한 뒤 배치 전사와 회의록 생성을 시작합니다.\n'
-            '현재 백엔드는 두 작업을 하나의 파이프라인으로 처리합니다.\n\n'
-            '회의방: ${room?.title ?? '-'}\nmeeting_id: ${room?.meetingId ?? '-'}',
+            '오디오 파일을 업로드하면 전사와 회의록 생성이 순서대로 진행됩니다.\n\n'
+            '${room?.title ?? '-'}\n${room?.meetingId ?? '-'}',
           ),
           actions: [
             TextButton(
@@ -157,14 +195,14 @@ class _MeetingsPageState extends State<MeetingsPage> {
                   Navigator.of(dialogContext).pop();
                   _controller.startBatchTranscription(useSavedRecording: true);
                 },
-                child: const Text('저장된 녹음 사용'),
+                child: const Text('저장된 녹음'),
               ),
             FilledButton.icon(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 _controller.startBatchTranscription(useSavedRecording: false);
               },
-              icon: const Icon(Icons.folder_open),
+              icon: const Icon(Icons.folder_open, size: 18),
               label: const Text('파일 선택'),
             ),
           ],
@@ -211,13 +249,104 @@ class _MeetingsPageState extends State<MeetingsPage> {
               },
               style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Theme.of(context).colorScheme.onError,
               ),
               child: const Text('삭제'),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+class _WorkflowTabs extends StatelessWidget {
+  const _WorkflowTabs({required this.selected, required this.onChanged});
+
+  final MeetingWorkflow selected;
+  final ValueChanged<MeetingWorkflow> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F2F6),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Row(
+        children: MeetingWorkflow.values
+            .map((workflow) {
+              final active = workflow == selected;
+              return Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => onChanged(workflow),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: active ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: active && workflow == MeetingWorkflow.batch
+                          ? Border.all(color: AppTheme.primary)
+                          : null,
+                      boxShadow: active
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 5,
+                                offset: const Offset(0, 1),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Text(
+                      workflow == MeetingWorkflow.realtime ? '🔴 실시간' : '📦 배치',
+                      style: TextStyle(
+                        color: active ? AppTheme.ink : AppTheme.muted,
+                        fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            })
+            .toList(growable: false),
+      ),
+    );
+  }
+}
+
+class _EmptyRooms extends StatelessWidget {
+  const _EmptyRooms({required this.workflow});
+
+  final MeetingWorkflow workflow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              workflow == MeetingWorkflow.realtime
+                  ? Icons.mic_none_rounded
+                  : Icons.inventory_2_outlined,
+              size: 42,
+              color: AppTheme.muted,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              workflow == MeetingWorkflow.realtime
+                  ? '실시간 회의실이 없습니다.'
+                  : '배치 회의실이 없습니다.',
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

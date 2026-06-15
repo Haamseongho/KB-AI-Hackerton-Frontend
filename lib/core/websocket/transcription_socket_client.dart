@@ -7,6 +7,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../features/meetings/domain/transcript_segment.dart';
 import '../../features/meetings/domain/transcription_event.dart';
 import '../config/app_config.dart';
+import '../errors/app_exception.dart';
 
 /// FastAPI realtime STT WebSocket과 통신하는 클라이언트입니다.
 ///
@@ -36,8 +37,19 @@ class TranscriptionSocketClient {
   }) async {
     await close();
     final uri = Uri.parse('$_wsBaseUrl/ws/meetings/$meetingId/transcribe');
-    _channel = WebSocketChannel.connect(uri);
-    _subscription = _channel!.stream.listen(
+    final channel = WebSocketChannel.connect(uri);
+    _channel = channel;
+    try {
+      await channel.ready.timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      await close();
+      throw AppException('실시간 전사 서버 연결 시간이 초과되었습니다: $uri');
+    } catch (error) {
+      await close();
+      throw AppException('실시간 전사 WebSocket 연결에 실패했습니다: $error');
+    }
+
+    _subscription = channel.stream.listen(
       _handleMessage,
       onError: (Object error) {
         _events.add(TranscriptionErrorEvent(message: error.toString()));

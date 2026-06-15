@@ -8,6 +8,7 @@ import '../domain/meeting_repository.dart';
 import '../domain/meeting_room.dart';
 import '../domain/meeting_status.dart';
 import '../domain/meeting_type.dart';
+import '../domain/meeting_workflow.dart';
 import '../domain/recording_asset.dart';
 import '../domain/transcript_segment.dart';
 
@@ -19,7 +20,7 @@ class SqliteMeetingRepository implements MeetingRepository {
   SqliteMeetingRepository({Database? database}) : _database = database;
 
   static const _databaseName = 'voice_doc_flutter.db';
-  static const _databaseVersion = 5;
+  static const _databaseVersion = 6;
 
   Database? _database;
 
@@ -127,6 +128,7 @@ class SqliteMeetingRepository implements MeetingRepository {
         status TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        workflow TEXT NOT NULL DEFAULT 'realtime',
         notes TEXT,
         summary TEXT,
         partial_transcript TEXT,
@@ -214,6 +216,11 @@ class SqliteMeetingRepository implements MeetingRepository {
         'ALTER TABLE meetings ADD COLUMN batch_status_code INTEGER',
       );
     }
+    if (oldVersion < 6) {
+      await db.execute(
+        "ALTER TABLE meetings ADD COLUMN workflow TEXT NOT NULL DEFAULT 'realtime'",
+      );
+    }
   }
 
   Map<String, Object?> _meetingRow(MeetingRoom room) {
@@ -227,6 +234,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       'status': room.status.value,
       'created_at': room.createdAt.toIso8601String(),
       'updated_at': room.updatedAt.toIso8601String(),
+      'workflow': room.workflow.value,
       'notes': room.notes,
       'summary': room.summary,
       'partial_transcript': room.partialTranscript,
@@ -297,6 +305,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       status: MeetingStatus.fromJson(row['status'] as String?),
       createdAt: DateTime.parse(row['created_at']! as String),
       updatedAt: DateTime.parse(row['updated_at']! as String),
+      workflow: MeetingWorkflow.fromJson(row['workflow'] as String?),
       notes: row['notes'] as String?,
       recording: _recordingFromRow(row),
       summary: row['summary'] as String?,
