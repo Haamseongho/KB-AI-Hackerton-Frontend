@@ -88,6 +88,7 @@ class MeetingsController extends ChangeNotifier {
   String? errorMessage;
   bool isLoading = false;
   bool isDownloadingPdf = false;
+  bool isDownloadingDocx = false;
   bool isDownloadingTranscript = false;
   bool isStartingBatch = false;
   bool debugMode = true;
@@ -245,6 +246,41 @@ class MeetingsController extends ChangeNotifier {
       errorMessage = _userMessage(error);
     } finally {
       isDownloadingPdf = false;
+      notifyListeners();
+    }
+  }
+
+  /// backend presigned URL로 DOCX를 다운로드한 뒤 기기의 문서 앱으로 엽니다.
+  Future<void> downloadAndOpenDocx() async {
+    final room = selectedRoom;
+    if (room == null) return;
+    final backendId = room.backendId;
+    if (backendId == null || backendId.isEmpty || room.docxS3Key == null) {
+      errorMessage = '다운로드할 회의록 DOCX가 아직 준비되지 않았습니다.';
+      notifyListeners();
+      return;
+    }
+
+    isDownloadingDocx = true;
+    errorMessage = null;
+    statusMessage = '회의록 DOCX를 다운로드하고 있습니다.';
+    notifyListeners();
+    try {
+      final payload = await _api.requestDocxDownloadUrl(backendId);
+      final downloadUrl = payload['download_url'];
+      if (downloadUrl is! String || downloadUrl.isEmpty) {
+        throw const AppException('DOCX 다운로드 URL이 없습니다.');
+      }
+      final bytes = await _api.downloadFileBytes(downloadUrl);
+      await _pdfDownloadService.saveDocxAndOpen(
+        meetingId: room.meetingId,
+        bytes: bytes,
+      );
+      statusMessage = '회의록 DOCX를 저장하고 열었습니다.';
+    } catch (error) {
+      errorMessage = _userMessage(error);
+    } finally {
+      isDownloadingDocx = false;
       notifyListeners();
     }
   }
@@ -494,6 +530,7 @@ class MeetingsController extends ChangeNotifier {
             minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
             minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
             pdfS3Key: result['pdf_s3_key'] as String?,
+            docxS3Key: result['docx_s3_key'] as String?,
             updatedAt: DateTime.now(),
             clearBatchError: true,
           ),
@@ -733,6 +770,7 @@ class MeetingsController extends ChangeNotifier {
         minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
         minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
         pdfS3Key: result['pdf_s3_key'] as String?,
+        docxS3Key: result['docx_s3_key'] as String?,
         uploadedAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -802,7 +840,8 @@ class MeetingsController extends ChangeNotifier {
     final hasMinutesArtifact =
         result['minutes_json_s3_key'] != null ||
         result['minutes_markdown_s3_key'] != null ||
-        result['pdf_s3_key'] != null;
+        result['pdf_s3_key'] != null ||
+        result['docx_s3_key'] != null;
     if (hasMinutesArtifact) return MeetingStatus.uploaded;
     return MeetingStatus.fromJson(result['status'] as String?);
   }

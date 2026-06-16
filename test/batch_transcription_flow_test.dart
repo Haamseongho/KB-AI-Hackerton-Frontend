@@ -89,6 +89,7 @@ void main() {
     expect(saved?.openIssues, ['실기기 성능 검증이 필요합니다.']);
     expect(saved?.actionItems.single['owner'], '참가자1');
     expect(saved?.pdfS3Key, 'pdf/backend-batch/minutes.pdf');
+    expect(saved?.docxS3Key, 'docx/backend-batch/minutes.docx');
   });
 
   test('keeps queued state when start response contains an unknown status', () {
@@ -221,6 +222,7 @@ class _FakeBatchMeetingApi extends MeetingApi {
       'minutes_json_s3_key': 'minutes/$backendMeetingId/minutes.json',
       'minutes_markdown_s3_key': 'minutes/$backendMeetingId/minutes.md',
       'pdf_s3_key': 'pdf/$backendMeetingId/minutes.pdf',
+      'docx_s3_key': 'docx/$backendMeetingId/minutes.docx',
     };
   }
 }

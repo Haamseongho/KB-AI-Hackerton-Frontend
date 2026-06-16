@@ -99,6 +99,11 @@ class MeetingApi {
     return _client.getJson('/meetings/$backendMeetingId/pdf-download-url');
   }
 
+  /// S3 회의록 DOCX를 내려받을 수 있는 짧은 만료 시간의 URL을 요청합니다.
+  Future<Map<String, dynamic>> requestDocxDownloadUrl(String backendMeetingId) {
+    return _client.getJson('/meetings/$backendMeetingId/docx-download-url');
+  }
+
   /// 백엔드에 저장된 realtime transcript segment를 삭제합니다.
   Future<Map<String, dynamic>> deleteTranscriptSegments(
     String backendMeetingId,

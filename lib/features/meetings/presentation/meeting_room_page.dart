@@ -89,12 +89,14 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                 _ResultResources(
                   room: room,
                   isDownloadingPdf: _controller.isDownloadingPdf,
+                  isDownloadingDocx: _controller.isDownloadingDocx,
                   isDownloadingTranscript: _controller.isDownloadingTranscript,
                   onRealtimeTranscript: () =>
                       _controller.downloadAndOpenTranscript(batch: false),
                   onBatchTranscript: () =>
                       _controller.downloadAndOpenTranscript(batch: true),
                   onPdf: _controller.downloadAndOpenPdf,
+                  onDocx: _controller.downloadAndOpenDocx,
                 ),
               ],
             ] else ...[
@@ -116,12 +118,14 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                 _ResultResources(
                   room: room,
                   isDownloadingPdf: _controller.isDownloadingPdf,
+                  isDownloadingDocx: _controller.isDownloadingDocx,
                   isDownloadingTranscript: _controller.isDownloadingTranscript,
                   onRealtimeTranscript: () =>
                       _controller.downloadAndOpenTranscript(batch: false),
                   onBatchTranscript: () =>
                       _controller.downloadAndOpenTranscript(batch: true),
                   onPdf: _controller.downloadAndOpenPdf,
+                  onDocx: _controller.downloadAndOpenDocx,
                 ),
               ],
               if (_isBatchProcessing(room.status)) ...[
@@ -155,6 +159,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
         room.actionItems.isNotEmpty ||
         room.minutesMarkdownS3Key != null ||
         room.pdfS3Key != null ||
+        room.docxS3Key != null ||
         room.segments.isNotEmpty;
   }
 
@@ -910,18 +915,22 @@ class _ResultResources extends StatelessWidget {
   const _ResultResources({
     required this.room,
     required this.isDownloadingPdf,
+    required this.isDownloadingDocx,
     required this.isDownloadingTranscript,
     required this.onRealtimeTranscript,
     required this.onBatchTranscript,
     required this.onPdf,
+    required this.onDocx,
   });
 
   final MeetingRoom room;
   final bool isDownloadingPdf;
+  final bool isDownloadingDocx;
   final bool isDownloadingTranscript;
   final VoidCallback onRealtimeTranscript;
   final VoidCallback onBatchTranscript;
   final VoidCallback onPdf;
+  final VoidCallback onDocx;
 
   @override
   Widget build(BuildContext context) {
@@ -1011,6 +1020,15 @@ class _ResultResources extends StatelessWidget {
                     extension: '.pdf',
                     actionLabel: isDownloadingPdf ? '여는 중' : '열기',
                     onAction: isDownloadingPdf ? null : onPdf,
+                  ),
+                if (room.docxS3Key != null)
+                  _ResourceRow(
+                    icon: Icons.description_outlined,
+                    color: const Color(0xFF2563EB),
+                    title: '회의록',
+                    extension: '.docx',
+                    actionLabel: isDownloadingDocx ? '여는 중' : '열기',
+                    onAction: isDownloadingDocx ? null : onDocx,
                   ),
               ],
             ),

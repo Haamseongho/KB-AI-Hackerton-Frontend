@@ -20,7 +20,7 @@ class SqliteMeetingRepository implements MeetingRepository {
   SqliteMeetingRepository({Database? database}) : _database = database;
 
   static const _databaseName = 'voice_doc_flutter.db';
-  static const _databaseVersion = 6;
+  static const _databaseVersion = 7;
 
   Database? _database;
 
@@ -139,6 +139,7 @@ class SqliteMeetingRepository implements MeetingRepository {
         minutes_json_s3_key TEXT,
         minutes_markdown_s3_key TEXT,
         pdf_s3_key TEXT,
+        docx_s3_key TEXT,
         uploaded_at TEXT,
         recording_file_name TEXT,
         recording_file_path TEXT,
@@ -221,6 +222,9 @@ class SqliteMeetingRepository implements MeetingRepository {
         "ALTER TABLE meetings ADD COLUMN workflow TEXT NOT NULL DEFAULT 'realtime'",
       );
     }
+    if (oldVersion < 7) {
+      await db.execute('ALTER TABLE meetings ADD COLUMN docx_s3_key TEXT');
+    }
   }
 
   Map<String, Object?> _meetingRow(MeetingRoom room) {
@@ -245,6 +249,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       'minutes_json_s3_key': room.minutesJsonS3Key,
       'minutes_markdown_s3_key': room.minutesMarkdownS3Key,
       'pdf_s3_key': room.pdfS3Key,
+      'docx_s3_key': room.docxS3Key,
       'uploaded_at': room.uploadedAt?.toIso8601String(),
       'recording_file_name': recording?.fileName,
       'recording_file_path': recording?.filePath,
@@ -318,6 +323,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       minutesJsonS3Key: row['minutes_json_s3_key'] as String?,
       minutesMarkdownS3Key: row['minutes_markdown_s3_key'] as String?,
       pdfS3Key: row['pdf_s3_key'] as String?,
+      docxS3Key: row['docx_s3_key'] as String?,
       uploadedAt: _dateTimeOrNull(row['uploaded_at'] as String?),
       batchJobId: row['batch_job_id'] as String?,
       batchStatus: BatchTranscriptionStatus.fromCode(row['batch_status_code']),

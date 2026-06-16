@@ -28,6 +28,7 @@ class MeetingRoom {
     this.minutesJsonS3Key,
     this.minutesMarkdownS3Key,
     this.pdfS3Key,
+    this.docxS3Key,
     this.uploadedAt,
     this.batchJobId,
     this.batchStatus,
@@ -58,6 +59,7 @@ class MeetingRoom {
   final String? minutesJsonS3Key;
   final String? minutesMarkdownS3Key;
   final String? pdfS3Key;
+  final String? docxS3Key;
   final DateTime? uploadedAt;
   final String? batchJobId;
   final BatchTranscriptionStatus? batchStatus;
@@ -89,6 +91,7 @@ class MeetingRoom {
     String? minutesJsonS3Key,
     String? minutesMarkdownS3Key,
     String? pdfS3Key,
+    String? docxS3Key,
     DateTime? uploadedAt,
     String? batchJobId,
     BatchTranscriptionStatus? batchStatus,
@@ -123,6 +126,7 @@ class MeetingRoom {
       minutesJsonS3Key: minutesJsonS3Key ?? this.minutesJsonS3Key,
       minutesMarkdownS3Key: minutesMarkdownS3Key ?? this.minutesMarkdownS3Key,
       pdfS3Key: pdfS3Key ?? this.pdfS3Key,
+      docxS3Key: docxS3Key ?? this.docxS3Key,
       uploadedAt: uploadedAt ?? this.uploadedAt,
       batchJobId: batchJobId ?? this.batchJobId,
       batchStatus: clearBatchStatus ? null : batchStatus ?? this.batchStatus,
