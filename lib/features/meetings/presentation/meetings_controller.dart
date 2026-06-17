@@ -240,6 +240,7 @@ class MeetingsController extends ChangeNotifier {
       final bytes = await _api.downloadFileBytes(downloadUrl);
       await _pdfDownloadService.saveAndOpen(
         meetingId: room.meetingId,
+        title: room.title,
         bytes: bytes,
       );
       statusMessage = '회의록 PDF를 저장하고 열었습니다.';
@@ -275,6 +276,7 @@ class MeetingsController extends ChangeNotifier {
       final bytes = await _api.downloadFileBytes(downloadUrl);
       await _pdfDownloadService.saveDocxAndOpen(
         meetingId: room.meetingId,
+        title: room.title,
         bytes: bytes,
       );
       statusMessage = '회의록 DOCX를 저장하고 열었습니다.';

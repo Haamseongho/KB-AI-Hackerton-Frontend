@@ -110,6 +110,12 @@ Current backend compatibility:
 - Batch and realtime transcript TXT downloads are available through
   `GET /meetings/{meeting_id}/transcript/batch` and
   `GET /meetings/{meeting_id}/transcript/realtime`.
+- PDF/DOCX minutes downloads use backend-issued presigned S3 URLs from
+  `GET /meetings/{meeting_id}/pdf-download-url` and
+  `GET /meetings/{meeting_id}/docx-download-url`. The backend URL includes a
+  `Content-Disposition` filename in the form `회의록-{title}.{ext}`; when Flutter
+  downloads bytes and saves locally, it should use the same visible filename
+  pattern instead of raw S3 keys.
 - Meeting results now include `open_issues` in addition to `decisions` and
   `action_items`.
 - Calendar-oriented action plan lookup is available through

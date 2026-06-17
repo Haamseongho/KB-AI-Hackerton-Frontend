@@ -12,6 +12,7 @@ class PdfDownloadService {
   /// PDF bytes를 `minutes` 디렉터리에 저장한 뒤 iOS/Android PDF 앱으로 엽니다.
   Future<String> saveAndOpen({
     required String meetingId,
+    required String title,
     required List<int> bytes,
   }) async {
     if (bytes.isEmpty) {
@@ -23,7 +24,7 @@ class PdfDownloadService {
     await directory.create(recursive: true);
 
     final file = File(
-      p.join(directory.path, '${_safeFileName(meetingId)}_minutes.pdf'),
+      p.join(directory.path, _minutesFileName(title, meetingId, 'pdf')),
     );
     await file.writeAsBytes(Uint8List.fromList(bytes), flush: true);
 
@@ -41,6 +42,7 @@ class PdfDownloadService {
   /// DOCX bytes를 `minutes` 디렉터리에 저장한 뒤 iOS/Android 문서 앱으로 엽니다.
   Future<String> saveDocxAndOpen({
     required String meetingId,
+    required String title,
     required List<int> bytes,
   }) async {
     if (bytes.isEmpty) {
@@ -52,7 +54,7 @@ class PdfDownloadService {
     await directory.create(recursive: true);
 
     final file = File(
-      p.join(directory.path, '${_safeFileName(meetingId)}_minutes.docx'),
+      p.join(directory.path, _minutesFileName(title, meetingId, 'docx')),
     );
     await file.writeAsBytes(Uint8List.fromList(bytes), flush: true);
 
@@ -68,8 +70,17 @@ class PdfDownloadService {
     return file.path;
   }
 
+  String _minutesFileName(String title, String meetingId, String extension) {
+    final safeTitle = _safeFileName(title);
+    final fallback = _safeFileName(meetingId);
+    return '회의록-${safeTitle.isEmpty ? fallback : safeTitle}.$extension';
+  }
+
   String _safeFileName(String value) {
-    final safe = value.trim().replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
-    return safe.isEmpty ? 'meeting' : safe;
+    return value
+        .trim()
+        .replaceAll(RegExp(r'[\\/:*?"<>|\r\n\t]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 }
