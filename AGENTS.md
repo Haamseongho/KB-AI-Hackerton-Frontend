@@ -112,6 +112,10 @@ Current backend compatibility:
   `GET /meetings/{meeting_id}/transcript/realtime`.
 - Meeting results now include `open_issues` in addition to `decisions` and
   `action_items`.
+- Calendar-oriented action plan lookup is available through
+  `GET /meetings/{meeting_id}/action-items`. Flutter should treat it as the
+  backend source for calendar candidate tasks and display `due_date_resolved`
+  when present, falling back to the original `due_date`.
 - The current backend does not expose a batch job cancellation endpoint.
   Flutter must block destructive deletion and conflicting realtime processing
   while a batch job is queued/transcribing/summarizing.
@@ -418,10 +422,18 @@ Expected response:
   "speaker_intentions": [],
   "key_conversations": [],
   "decisions": [],
-  "action_items": [],
+  "action_items": [
+    {
+      "owner": "spk_1",
+      "task": "회의록 초안 공유",
+      "due_date": "금요일",
+      "due_date_resolved": "2026-06-19"
+    }
+  ],
   "minutes_json_s3_key": "kb-ai-voicedoc/minutes/{meeting_id}/minutes.json",
   "minutes_markdown_s3_key": "kb-ai-voicedoc/minutes/{meeting_id}/minutes.md",
-  "pdf_s3_key": "kb-ai-voicedoc/pdf/{meeting_id}/minutes.pdf"
+  "pdf_s3_key": "kb-ai-voicedoc/pdf/{meeting_id}/minutes.pdf",
+  "docx_s3_key": "kb-ai-voicedoc/docx/{meeting_id}/minutes.docx"
 }
 ```
 
@@ -456,6 +468,32 @@ Purpose:
 - Fetch summary/minutes metadata after LangGraph / Bedrock processing.
 
 If the result is not completed, keep showing the current processing state instead of assuming the result is ready.
+
+### Get Meeting Action Items
+
+`GET /meetings/{meeting_id}/action-items`
+
+Purpose:
+- Fetch only the backend-stored action items for calendar-add candidate UI.
+
+Expected response:
+
+```json
+{
+  "meeting_id": "meeting-uuid",
+  "status": "completed",
+  "action_items": [
+    {
+      "owner": "spk_1",
+      "task": "회의록 초안 공유",
+      "due_date": "금요일",
+      "due_date_resolved": "2026-06-19"
+    }
+  ]
+}
+```
+
+If `action_items` is empty, keep the UI stable and show no calendar candidate rows.
 
 ---
 

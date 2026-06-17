@@ -90,6 +90,7 @@ class MeetingsController extends ChangeNotifier {
   bool isDownloadingPdf = false;
   bool isDownloadingDocx = false;
   bool isDownloadingTranscript = false;
+  bool isRefreshingActionItems = false;
   bool isStartingBatch = false;
   bool debugMode = true;
 
@@ -317,6 +318,37 @@ class MeetingsController extends ChangeNotifier {
       notifyListeners();
     } finally {
       isDownloadingTranscript = false;
+      notifyListeners();
+    }
+  }
+
+  /// 캘린더 등록 후보로 사용할 후속 조치 목록을 backend에서 다시 조회합니다.
+  Future<void> refreshActionItems() async {
+    final room = selectedRoom;
+    if (room == null) return;
+    final backendId = room.backendId;
+    if (backendId == null || backendId.isEmpty) {
+      errorMessage = '액션 플랜을 조회할 백엔드 회의 ID가 없습니다.';
+      notifyListeners();
+      return;
+    }
+
+    isRefreshingActionItems = true;
+    errorMessage = null;
+    statusMessage = '캘린더용 액션 플랜을 조회하고 있습니다.';
+    notifyListeners();
+    try {
+      final payload = await _api.getMeetingActionItems(backendId);
+      final updated = room.copyWith(
+        actionItems: _mapList(payload['action_items']),
+        updatedAt: DateTime.now(),
+      );
+      await _saveAndSelect(updated, '캘린더용 액션 플랜을 업데이트했습니다.');
+    } catch (error) {
+      errorMessage = _userMessage(error);
+      notifyListeners();
+    } finally {
+      isRefreshingActionItems = false;
       notifyListeners();
     }
   }

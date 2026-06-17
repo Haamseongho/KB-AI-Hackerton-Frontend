@@ -91,12 +91,14 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                   isDownloadingPdf: _controller.isDownloadingPdf,
                   isDownloadingDocx: _controller.isDownloadingDocx,
                   isDownloadingTranscript: _controller.isDownloadingTranscript,
+                  isRefreshingActionItems: _controller.isRefreshingActionItems,
                   onRealtimeTranscript: () =>
                       _controller.downloadAndOpenTranscript(batch: false),
                   onBatchTranscript: () =>
                       _controller.downloadAndOpenTranscript(batch: true),
                   onPdf: _controller.downloadAndOpenPdf,
                   onDocx: _controller.downloadAndOpenDocx,
+                  onRefreshActionItems: _controller.refreshActionItems,
                 ),
               ],
             ] else ...[
@@ -120,12 +122,14 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                   isDownloadingPdf: _controller.isDownloadingPdf,
                   isDownloadingDocx: _controller.isDownloadingDocx,
                   isDownloadingTranscript: _controller.isDownloadingTranscript,
+                  isRefreshingActionItems: _controller.isRefreshingActionItems,
                   onRealtimeTranscript: () =>
                       _controller.downloadAndOpenTranscript(batch: false),
                   onBatchTranscript: () =>
                       _controller.downloadAndOpenTranscript(batch: true),
                   onPdf: _controller.downloadAndOpenPdf,
                   onDocx: _controller.downloadAndOpenDocx,
+                  onRefreshActionItems: _controller.refreshActionItems,
                 ),
               ],
               if (_isBatchProcessing(room.status)) ...[
@@ -917,20 +921,24 @@ class _ResultResources extends StatelessWidget {
     required this.isDownloadingPdf,
     required this.isDownloadingDocx,
     required this.isDownloadingTranscript,
+    required this.isRefreshingActionItems,
     required this.onRealtimeTranscript,
     required this.onBatchTranscript,
     required this.onPdf,
     required this.onDocx,
+    required this.onRefreshActionItems,
   });
 
   final MeetingRoom room;
   final bool isDownloadingPdf;
   final bool isDownloadingDocx;
   final bool isDownloadingTranscript;
+  final bool isRefreshingActionItems;
   final VoidCallback onRealtimeTranscript;
   final VoidCallback onBatchTranscript;
   final VoidCallback onPdf;
   final VoidCallback onDocx;
+  final VoidCallback onRefreshActionItems;
 
   @override
   Widget build(BuildContext context) {
@@ -955,17 +963,27 @@ class _ResultResources extends StatelessWidget {
                     _ResultList(title: '결정 사항', items: room.decisions),
                   if (room.openIssues.isNotEmpty)
                     _ResultList(title: '미결 사항', items: room.openIssues),
-                  if (room.actionItems.isNotEmpty)
-                    _ResultList(
-                      title: '후속 조치',
-                      items: room.actionItems
-                          .map(
-                            (item) =>
-                                '${item['owner'] ?? '담당자 미정'}: '
-                                '${item['task'] ?? item['action'] ?? '-'}',
-                          )
-                          .toList(growable: false),
+                  if (room.actionItems.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    _ActionItemsList(items: room.actionItems),
+                  ],
+                  if (room.backendId != null) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: isRefreshingActionItems
+                            ? null
+                            : onRefreshActionItems,
+                        icon: const Icon(Icons.event_available_outlined),
+                        label: Text(
+                          isRefreshingActionItems
+                              ? '액션 플랜 조회 중'
+                              : '캘린더용 액션 플랜 갱신',
+                        ),
+                      ),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -1062,6 +1080,32 @@ class _ResultList extends StatelessWidget {
           ...items.map((item) => Text('• $item')),
         ],
       ),
+    );
+  }
+}
+
+class _ActionItemsList extends StatelessWidget {
+  const _ActionItemsList({required this.items});
+
+  final List<Map<String, dynamic>> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('후속 조치', style: TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        ...items.map((item) {
+          final owner = item['owner']?.toString().trim();
+          final task = item['task'] ?? item['action'] ?? '-';
+          final due = item['due_date_resolved'] ?? item['due_date'] ?? '미정';
+          return Text(
+            '• ${owner == null || owner.isEmpty ? '담당자 미정' : owner}: '
+            '$task (기한: $due)',
+          );
+        }),
+      ],
     );
   }
 }

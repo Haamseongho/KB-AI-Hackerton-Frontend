@@ -88,6 +88,7 @@ void main() {
     expect(saved?.decisions, ['배치 처리 방식을 확정합니다.']);
     expect(saved?.openIssues, ['실기기 성능 검증이 필요합니다.']);
     expect(saved?.actionItems.single['owner'], '참가자1');
+    expect(saved?.actionItems.single['due_date_resolved'], '2026-06-19');
     expect(saved?.pdfS3Key, 'pdf/backend-batch/minutes.pdf');
     expect(saved?.docxS3Key, 'docx/backend-batch/minutes.docx');
   });
@@ -216,7 +217,7 @@ class _FakeBatchMeetingApi extends MeetingApi {
           'owner': '참가자1',
           'task': '실기기 테스트',
           'due_date': '금요일',
-          'resolved': 'false',
+          'due_date_resolved': '2026-06-19',
         },
       ],
       'minutes_json_s3_key': 'minutes/$backendMeetingId/minutes.json',

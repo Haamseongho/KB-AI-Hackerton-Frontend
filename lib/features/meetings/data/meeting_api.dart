@@ -35,6 +35,10 @@ class MeetingApi {
     return _client.getJson('/meetings/$backendMeetingId/result');
   }
 
+  Future<Map<String, dynamic>> getMeetingActionItems(String backendMeetingId) {
+    return _client.getJson('/meetings/$backendMeetingId/action-items');
+  }
+
   Future<Map<String, dynamic>> getJob(String jobId) {
     return _client.getJson('/jobs/$jobId');
   }
