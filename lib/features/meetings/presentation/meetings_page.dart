@@ -268,44 +268,64 @@ class _WorkflowTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 44,
-      padding: const EdgeInsets.all(3),
+      height: 48,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F2F6),
-        borderRadius: BorderRadius.circular(13),
+        color: const Color(0xFFEFF1F5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE1E5EC)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         children: MeetingWorkflow.values
             .map((workflow) {
               final active = workflow == selected;
               return Expanded(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: () => onChanged(workflow),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: active ? Colors.white : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                      border: active && workflow == MeetingWorkflow.batch
-                          ? Border.all(color: AppTheme.primary)
-                          : null,
-                      boxShadow: active
-                          ? [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.05),
-                                blurRadius: 5,
-                                offset: const Offset(0, 1),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Text(
-                      workflow == MeetingWorkflow.realtime ? '🔴 실시간' : '📦 배치',
-                      style: TextStyle(
-                        color: active ? AppTheme.ink : AppTheme.muted,
-                        fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                child: Semantics(
+                  button: true,
+                  selected: active,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => onChanged(workflow),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: active ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                          border: active
+                              ? null
+                              : Border.all(color: Colors.transparent),
+                          boxShadow: active
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.08),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Text(
+                          workflow == MeetingWorkflow.realtime
+                              ? '🔴 실시간'
+                              : '📦 배치',
+                          style: TextStyle(
+                            color: active ? AppTheme.ink : AppTheme.muted,
+                            fontWeight: active
+                                ? FontWeight.w800
+                                : FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
                   ),
