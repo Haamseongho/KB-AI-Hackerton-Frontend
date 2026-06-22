@@ -97,7 +97,10 @@ Current backend compatibility:
 - Realtime endpoint: `WS /ws/meetings/{meeting_id}/transcribe`.
 - Realtime start/resume event uses `media_encoding`, `sample_rate`, `language_code`, and optional `vocabulary_name`.
 - Realtime transcript events are `transcript.partial`, `transcript.final`, `status`, and `error`.
-- Realtime final segments can be summarized through `POST /meetings/{meeting_id}/minutes-from-realtime`.
+- Realtime final segments start minutes generation through
+  `POST /meetings/{meeting_id}/minutes-from-realtime/start`; Flutter polls
+  `GET /meetings/{meeting_id}/realtime-progress` and fetches
+  `GET /meetings/{meeting_id}/result` after completion.
 - REST calls must use the backend UUID `id`; display IDs like `MTG-20260521-006` are local/UI identifiers unless backend adds them.
 - Current backend `meeting_type` values are `one_on_one`, `small`, `medium`, and `unknown`.
 - Current `/meetings/{meeting_id}/upload-url` accepts one audio asset with `file_extension` and `content_type`.
@@ -409,39 +412,51 @@ Expected response:
 Flutter must call this endpoint after the presigned PUT succeeds and before
 calling `POST /meetings/{meeting_id}/start`.
 
-### Create Minutes From Realtime
+### Start Minutes From Realtime
 
-`POST /meetings/{meeting_id}/minutes-from-realtime`
+`POST /meetings/{meeting_id}/minutes-from-realtime/start`
 
 Purpose:
-- Request LangGraph / Bedrock summary after recording is finished and transcript is available.
+- Start asynchronous LangGraph / Bedrock summary generation after recording is finished and transcript is available.
 
 Expected response:
 
 ```json
 {
   "meeting_id": "meeting-uuid",
-  "status": "completed",
-  "title": "회의록 제목",
-  "topic": "회의 주제",
-  "summary": "회의 요약",
-  "speaker_intentions": [],
-  "key_conversations": [],
-  "decisions": [],
-  "action_items": [
-    {
-      "owner": "spk_1",
-      "task": "회의록 초안 공유",
-      "due_date": "금요일",
-      "due_date_resolved": "2026-06-19"
-    }
-  ],
-  "minutes_json_s3_key": "kb-ai-voicedoc/minutes/{meeting_id}/minutes.json",
-  "minutes_markdown_s3_key": "kb-ai-voicedoc/minutes/{meeting_id}/minutes.md",
-  "pdf_s3_key": "kb-ai-voicedoc/pdf/{meeting_id}/minutes.pdf",
-  "docx_s3_key": "kb-ai-voicedoc/docx/{meeting_id}/minutes.docx"
+  "status": "summarizing",
+  "realtime_status_code": 5,
+  "progress_percent": 0,
+  "progress_step": "requested",
+  "progress_message": "회의록 생성을 요청했습니다."
 }
 ```
+
+### Get Realtime Progress
+
+`GET /meetings/{meeting_id}/realtime-progress`
+
+Purpose:
+- Poll asynchronous realtime minutes generation progress.
+
+Expected response:
+
+```json
+{
+  "meeting_id": "meeting-uuid",
+  "status": "summarizing",
+  "realtime_status_code": 5,
+  "progress_percent": 45,
+  "progress_step": "llm_generating_minutes",
+  "progress_message": "LLM이 회의 요약과 액션 아이템을 생성하고 있습니다.",
+  "completed": false,
+  "failed": false
+}
+```
+
+Flutter must show `progress_percent` before the processing label, for example
+`45% 처리 중`, and must fetch `/result` only after `completed=true` or
+`progress_percent >= 100`.
 
 ### Get Meeting
 

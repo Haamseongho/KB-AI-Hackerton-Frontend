@@ -4,6 +4,7 @@ import 'meeting_status.dart';
 import 'meeting_type.dart';
 import 'meeting_workflow.dart';
 import 'recording_asset.dart';
+import 'realtime_minutes_progress.dart';
 import 'transcript_segment.dart';
 
 class MeetingRoom {
@@ -34,6 +35,7 @@ class MeetingRoom {
     this.batchJobId,
     this.batchStatus,
     this.batchErrorMessage,
+    this.realtimeMinutesProgress,
     this.decisions = const [],
     this.openIssues = const [],
     this.actionItems = const [],
@@ -65,6 +67,7 @@ class MeetingRoom {
   final String? batchJobId;
   final BatchTranscriptionStatus? batchStatus;
   final String? batchErrorMessage;
+  final RealtimeMinutesProgress? realtimeMinutesProgress;
   final List<String> decisions;
   final List<String> openIssues;
   final List<ActionItem> actionItems;
@@ -99,6 +102,8 @@ class MeetingRoom {
     bool clearBatchStatus = false,
     String? batchErrorMessage,
     bool clearBatchError = false,
+    RealtimeMinutesProgress? realtimeMinutesProgress,
+    bool clearRealtimeMinutesProgress = false,
     List<String>? decisions,
     List<String>? openIssues,
     List<ActionItem>? actionItems,
@@ -134,6 +139,9 @@ class MeetingRoom {
       batchErrorMessage: clearBatchError
           ? null
           : batchErrorMessage ?? this.batchErrorMessage,
+      realtimeMinutesProgress: clearRealtimeMinutesProgress
+          ? null
+          : realtimeMinutesProgress ?? this.realtimeMinutesProgress,
       decisions: decisions ?? this.decisions,
       openIssues: openIssues ?? this.openIssues,
       actionItems: actionItems ?? this.actionItems,

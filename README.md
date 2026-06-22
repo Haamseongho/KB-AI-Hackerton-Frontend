@@ -23,8 +23,9 @@ Flutter App
   -> WS /ws/meetings/{id}/transcribe
   -> send 16 kHz mono PCM chunks
   -> receive transcript.partial / transcript.final
-  -> POST /meetings/{id}/minutes-from-realtime
-  -> receive minutes_json_s3_key / minutes_markdown_s3_key / pdf_s3_key
+  -> POST /meetings/{id}/minutes-from-realtime/start
+  -> poll GET /meetings/{id}/realtime-progress
+  -> GET /meetings/{id}/result
 ```
 
 실시간 녹음 세션은 녹음을 시작한 로컬 회의방에 고정됩니다. 녹음 중 목록으로

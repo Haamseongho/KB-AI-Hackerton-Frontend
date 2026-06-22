@@ -105,8 +105,8 @@ flutter pub get
 5. 실시간 transcript 표시 확인
 6. `Pause` 후 다시 `Record` 확인
 7. `Leave`로 transcript/recording 저장
-8. `Minutes`로 `/minutes-from-realtime` 호출
-9. S3 회의록 산출물 생성 여부 확인
+8. `Minutes`로 `/minutes-from-realtime/start` 호출
+9. `% 처리 중` 진행률 표시와 S3 회의록 산출물 생성 여부 확인
 
 ## 자주 막히는 부분
 

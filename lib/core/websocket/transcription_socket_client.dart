@@ -126,6 +126,7 @@ class TranscriptionSocketClient {
         _events.add(
           TranscriptionStatusEvent(
             status: decoded['status'] as String? ?? 'unknown',
+            realtimeStatusCode: _intValue(decoded['realtime_status_code']),
             message:
                 decoded['message'] as String? ??
                 '백엔드 상태: ${decoded['status'] ?? 'unknown'}',

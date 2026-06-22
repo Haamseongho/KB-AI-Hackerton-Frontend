@@ -88,14 +88,18 @@ class MeetingApi {
     return _client.getPathBytes('/meetings/$backendMeetingId/transcript/batch');
   }
 
-  Future<Map<String, dynamic>> createMinutesFromRealtime(
+  Future<Map<String, dynamic>> startMinutesFromRealtime(
     String backendMeetingId, {
     List<Map<String, Object?>>? segments,
   }) {
     return _client.postJson(
-      '/meetings/$backendMeetingId/minutes-from-realtime',
+      '/meetings/$backendMeetingId/minutes-from-realtime/start',
       body: segments == null ? null : {'segments': segments},
     );
+  }
+
+  Future<Map<String, dynamic>> getRealtimeProgress(String backendMeetingId) {
+    return _client.getJson('/meetings/$backendMeetingId/realtime-progress');
   }
 
   /// S3 회의록 PDF를 내려받을 수 있는 짧은 만료 시간의 URL을 요청합니다.

@@ -5,10 +5,15 @@ sealed class TranscriptionEvent {
 }
 
 class TranscriptionStatusEvent extends TranscriptionEvent {
-  const TranscriptionStatusEvent({required this.status, required this.message});
+  const TranscriptionStatusEvent({
+    required this.status,
+    required this.message,
+    this.realtimeStatusCode,
+  });
 
   final String status;
   final String message;
+  final int? realtimeStatusCode;
 }
 
 class PartialTranscriptEvent extends TranscriptionEvent {

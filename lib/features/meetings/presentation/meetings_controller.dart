@@ -22,6 +22,7 @@ import '../domain/meeting_room.dart';
 import '../domain/meeting_status.dart';
 import '../domain/meeting_type.dart';
 import '../domain/meeting_workflow.dart';
+import '../domain/realtime_minutes_progress.dart';
 import '../domain/recording_asset.dart';
 import '../domain/transcript_segment.dart';
 import '../domain/transcription_event.dart';
@@ -45,6 +46,7 @@ class MeetingsController extends ChangeNotifier {
     PdfDownloadService? pdfDownloadService,
     CalendarEventService? calendarEventService,
     Duration batchPollInterval = const Duration(seconds: 10),
+    Duration realtimeMinutesPollInterval = const Duration(milliseconds: 1500),
   }) : _repository = repository,
        _api = api,
        _permissionService = permissionService ?? MicrophonePermissionService(),
@@ -62,7 +64,8 @@ class MeetingsController extends ChangeNotifier {
            transcriptDownloadService ?? TranscriptDownloadService(),
        _pdfDownloadService = pdfDownloadService ?? PdfDownloadService(),
        _calendarEventService = calendarEventService ?? CalendarEventService(),
-       _batchPollInterval = batchPollInterval;
+       _batchPollInterval = batchPollInterval,
+       _realtimeMinutesPollInterval = realtimeMinutesPollInterval;
 
   final MeetingRepository _repository;
   final MeetingApi _api;
@@ -76,6 +79,7 @@ class MeetingsController extends ChangeNotifier {
   final PdfDownloadService _pdfDownloadService;
   final CalendarEventService _calendarEventService;
   final Duration _batchPollInterval;
+  final Duration _realtimeMinutesPollInterval;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<TranscriptionEvent>? _transcriptionSubscription;
   DateTime? _streamStartedAt;
@@ -85,6 +89,8 @@ class MeetingsController extends ChangeNotifier {
   final Set<String> _deletedLocalIds = {};
   final Map<String, Timer> _batchPollTimers = {};
   final Set<String> _batchPollingLocalIds = {};
+  final Map<String, Timer> _realtimeMinutesPollTimers = {};
+  final Set<String> _realtimeMinutesPollingLocalIds = {};
 
   List<MeetingRoom> rooms = const [];
   MeetingRoom? selectedRoom;
@@ -126,6 +132,9 @@ class MeetingsController extends ChangeNotifier {
     for (final room in rooms) {
       if (room.batchJobId != null && _isBatchProcessing(room.status)) {
         _scheduleBatchPoll(room.localId, immediate: true);
+      }
+      if (_isRealtimeMinutesProcessing(room)) {
+        _scheduleRealtimeMinutesPoll(room.localId, immediate: true);
       }
     }
   }
@@ -198,6 +207,7 @@ class MeetingsController extends ChangeNotifier {
 
     _deletedLocalIds.add(room.localId);
     _batchPollTimers.remove(room.localId)?.cancel();
+    _realtimeMinutesPollTimers.remove(room.localId)?.cancel();
     try {
       final backendId = room.backendId;
       if (backendId != null && backendId.isNotEmpty) {
@@ -766,7 +776,7 @@ class MeetingsController extends ChangeNotifier {
     await _saveAndSelect(updated, '최종 대화록을 받았습니다.');
   }
 
-  /// 최종 transcript segment를 backend `/minutes-from-realtime`로 보내 회의록을 생성합니다.
+  /// 최종 transcript segment를 backend에 보내고 진행률을 polling하며 회의록을 생성합니다.
   Future<void> generateMinutesFromRealtime() async {
     final room = selectedRoom;
     if (room == null) return;
@@ -775,12 +785,25 @@ class MeetingsController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (_isRealtimeMinutesProcessing(room)) {
+      _scheduleRealtimeMinutesPoll(room.localId, immediate: true);
+      errorMessage = '이미 실시간 회의록 생성이 진행 중입니다.';
+      notifyListeners();
+      return;
+    }
 
     try {
       final backendMeetingId = await _ensureBackendMeeting(room);
+      final initialProgress = const RealtimeMinutesProgress(
+        statusCode: 5,
+        percent: 0,
+        step: 'requested',
+        message: '회의록 생성을 요청했습니다.',
+      );
       final generating = room.copyWith(
         backendId: backendMeetingId,
-        status: MeetingStatus.uploading,
+        status: MeetingStatus.summarizing,
+        realtimeMinutesProgress: initialProgress,
         updatedAt: DateTime.now(),
       );
       await _saveAndSelect(generating, '실시간 대화록 기반 회의록 생성을 요청 중입니다.');
@@ -800,32 +823,125 @@ class MeetingsController extends ChangeNotifier {
                   },
                 )
                 .toList(growable: false);
-      final result = await _api.createMinutesFromRealtime(
+      final startPayload = await _api.startMinutesFromRealtime(
         backendMeetingId,
         segments: segments,
       );
-      final actionItems = await _actionItemsFromBackendOrResult(
-        backendMeetingId,
-        result,
+      final startedProgress =
+          RealtimeMinutesProgress.fromJson(startPayload) ?? initialProgress;
+      await _saveAndSelect(
+        generating.copyWith(
+          status: MeetingStatus.fromJson(
+            startPayload['status'] as String?,
+            fallback: MeetingStatus.summarizing,
+          ),
+          realtimeMinutesProgress: startedProgress,
+          updatedAt: DateTime.now(),
+        ),
+        startedProgress.message ?? '실시간 회의록 생성이 시작되었습니다.',
       );
-      final updated = generating.copyWith(
-        status: _statusAfterRealtimeMinutes(result),
-        title: result['title'] as String?,
-        summary: result['summary'] as String?,
-        decisions: _stringList(result['decisions']),
-        openIssues: _stringList(result['open_issues']),
-        actionItems: actionItems,
-        minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
-        minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
-        pdfS3Key: result['pdf_s3_key'] as String?,
-        docxS3Key: result['docx_s3_key'] as String?,
-        uploadedAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      await _saveAndSelect(updated, '실시간 회의록 생성이 완료되었습니다.');
+      _scheduleRealtimeMinutesPoll(generating.localId, immediate: true);
     } catch (error) {
       errorMessage = _userMessage(error);
       notifyListeners();
+    }
+  }
+
+  void _scheduleRealtimeMinutesPoll(String localId, {bool immediate = false}) {
+    _realtimeMinutesPollTimers.remove(localId)?.cancel();
+    if (immediate) {
+      unawaited(_pollRealtimeMinutes(localId));
+      return;
+    }
+    _realtimeMinutesPollTimers[localId] = Timer(
+      _realtimeMinutesPollInterval,
+      () => unawaited(_pollRealtimeMinutes(localId)),
+    );
+  }
+
+  Future<void> _pollRealtimeMinutes(String localId) async {
+    if (!_realtimeMinutesPollingLocalIds.add(localId)) return;
+    try {
+      final room = await _repository.getRoom(localId);
+      final backendId = room?.backendId;
+      if (room == null || backendId == null) return;
+
+      final payload = await _api.getRealtimeProgress(backendId);
+      final progress = RealtimeMinutesProgress.fromJson(payload);
+      final status = MeetingStatus.fromJson(
+        payload['status'] as String?,
+        fallback: room.status,
+      );
+
+      if (progress?.failed == true) {
+        _realtimeMinutesPollTimers.remove(localId)?.cancel();
+        await _saveKeepingSelection(
+          room.copyWith(
+            status: MeetingStatus.failed,
+            realtimeMinutesProgress: progress,
+            updatedAt: DateTime.now(),
+          ),
+          progress?.message ?? '실시간 회의록 생성에 실패했습니다.',
+        );
+        return;
+      }
+
+      if (progress?.completed == true || (progress?.percent ?? 0) >= 100) {
+        _realtimeMinutesPollTimers.remove(localId)?.cancel();
+        final result = await _api.getMeetingResult(backendId);
+        final actionItems = await _actionItemsFromBackendOrResult(
+          backendId,
+          result,
+        );
+        await _saveKeepingSelection(
+          room.copyWith(
+            status: _statusAfterRealtimeMinutes(result),
+            title: result['title'] as String?,
+            summary: result['summary'] as String?,
+            decisions: _stringList(result['decisions']),
+            openIssues: _stringList(result['open_issues']),
+            actionItems: actionItems,
+            minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
+            minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
+            pdfS3Key: result['pdf_s3_key'] as String?,
+            docxS3Key: result['docx_s3_key'] as String?,
+            realtimeMinutesProgress:
+                progress ??
+                const RealtimeMinutesProgress(
+                  statusCode: 6,
+                  percent: 100,
+                  step: 'completed',
+                  message: '회의록 생성이 완료되었습니다.',
+                  completed: true,
+                ),
+            uploadedAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+          '실시간 회의록 생성이 완료되었습니다.',
+        );
+        return;
+      }
+
+      await _saveKeepingSelection(
+        room.copyWith(
+          status: status,
+          realtimeMinutesProgress: progress,
+          updatedAt: DateTime.now(),
+        ),
+        progress?.message ?? _messageFor(status),
+      );
+      _scheduleRealtimeMinutesPoll(localId);
+    } catch (error) {
+      final room = await _repository.getRoom(localId);
+      if (room != null) {
+        await _saveKeepingSelection(
+          room.copyWith(updatedAt: DateTime.now()),
+          '실시간 회의록 진행률 조회에 실패했습니다. 잠시 후 다시 시도합니다.',
+        );
+        _scheduleRealtimeMinutesPoll(localId);
+      }
+    } finally {
+      _realtimeMinutesPollingLocalIds.remove(localId);
     }
   }
 
@@ -974,6 +1090,25 @@ class MeetingsController extends ChangeNotifier {
 
     switch (event) {
       case TranscriptionStatusEvent():
+        final progress = event.realtimeStatusCode == null
+            ? room.realtimeMinutesProgress
+            : RealtimeMinutesProgress(
+                statusCode: event.realtimeStatusCode,
+                percent: room.realtimeMinutesProgress?.percent,
+                step: room.realtimeMinutesProgress?.step,
+                message: room.realtimeMinutesProgress?.message,
+                updatedAt: room.realtimeMinutesProgress?.updatedAt,
+                completed: room.realtimeMinutesProgress?.completed ?? false,
+                failed: room.realtimeMinutesProgress?.failed ?? false,
+              );
+        if (progress != room.realtimeMinutesProgress) {
+          await _saveKeepingSelection(
+            room.copyWith(
+              realtimeMinutesProgress: progress,
+              updatedAt: DateTime.now(),
+            ),
+          );
+        }
         if (isActiveRoomSelected) {
           statusMessage = event.message;
           notifyListeners();
@@ -1110,6 +1245,11 @@ class MeetingsController extends ChangeNotifier {
         status == MeetingStatus.summarizing;
   }
 
+  bool _isRealtimeMinutesProcessing(MeetingRoom room) {
+    return room.realtimeMinutesProgress?.isProcessing == true ||
+        room.status == MeetingStatus.summarizing;
+  }
+
   Future<void> _deleteLocalFile(String? path) async {
     if (path == null || path.isEmpty || path.contains('://')) return;
     final file = File(path);
@@ -1208,6 +1348,9 @@ class MeetingsController extends ChangeNotifier {
   @override
   void dispose() {
     for (final timer in _batchPollTimers.values) {
+      timer.cancel();
+    }
+    for (final timer in _realtimeMinutesPollTimers.values) {
       timer.cancel();
     }
     unawaited(_audioSubscription?.cancel());

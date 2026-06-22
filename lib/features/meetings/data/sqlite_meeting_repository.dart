@@ -11,6 +11,7 @@ import '../domain/meeting_status.dart';
 import '../domain/meeting_type.dart';
 import '../domain/meeting_workflow.dart';
 import '../domain/recording_asset.dart';
+import '../domain/realtime_minutes_progress.dart';
 import '../domain/transcript_segment.dart';
 
 /// 앱 재시작 후에도 회의방, transcript, recording metadata를 유지하는 SQLite 저장소입니다.
@@ -21,7 +22,7 @@ class SqliteMeetingRepository implements MeetingRepository {
   SqliteMeetingRepository({Database? database}) : _database = database;
 
   static const _databaseName = 'voice_doc_flutter.db';
-  static const _databaseVersion = 7;
+  static const _databaseVersion = 8;
 
   Database? _database;
 
@@ -155,6 +156,13 @@ class SqliteMeetingRepository implements MeetingRepository {
         batch_job_id TEXT,
         batch_status_code INTEGER,
         batch_error_message TEXT,
+        realtime_status_code INTEGER,
+        realtime_progress_percent INTEGER,
+        realtime_progress_step TEXT,
+        realtime_progress_message TEXT,
+        realtime_progress_updated_at TEXT,
+        realtime_progress_completed INTEGER NOT NULL DEFAULT 0,
+        realtime_progress_failed INTEGER NOT NULL DEFAULT 0,
         decisions_json TEXT,
         open_issues_json TEXT,
         action_items_json TEXT
@@ -226,6 +234,29 @@ class SqliteMeetingRepository implements MeetingRepository {
     if (oldVersion < 7) {
       await db.execute('ALTER TABLE meetings ADD COLUMN docx_s3_key TEXT');
     }
+    if (oldVersion < 8) {
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_status_code INTEGER',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_percent INTEGER',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_step TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_message TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_updated_at TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_completed INTEGER NOT NULL DEFAULT 0',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_failed INTEGER NOT NULL DEFAULT 0',
+      );
+    }
   }
 
   Map<String, Object?> _meetingRow(MeetingRoom room) {
@@ -265,6 +296,17 @@ class SqliteMeetingRepository implements MeetingRepository {
       'batch_job_id': room.batchJobId,
       'batch_status_code': room.batchStatus?.code,
       'batch_error_message': room.batchErrorMessage,
+      'realtime_status_code': room.realtimeMinutesProgress?.statusCode,
+      'realtime_progress_percent': room.realtimeMinutesProgress?.percent,
+      'realtime_progress_step': room.realtimeMinutesProgress?.step,
+      'realtime_progress_message': room.realtimeMinutesProgress?.message,
+      'realtime_progress_updated_at': room.realtimeMinutesProgress?.updatedAt
+          ?.toIso8601String(),
+      'realtime_progress_completed':
+          room.realtimeMinutesProgress?.completed == true ? 1 : 0,
+      'realtime_progress_failed': room.realtimeMinutesProgress?.failed == true
+          ? 1
+          : 0,
       'decisions_json': jsonEncode(room.decisions),
       'open_issues_json': jsonEncode(room.openIssues),
       'action_items_json': jsonEncode(
@@ -331,6 +373,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       batchJobId: row['batch_job_id'] as String?,
       batchStatus: BatchTranscriptionStatus.fromCode(row['batch_status_code']),
       batchErrorMessage: row['batch_error_message'] as String?,
+      realtimeMinutesProgress: _realtimeProgressFromRow(row),
       decisions: _stringListFromJson(row['decisions_json'] as String?),
       openIssues: _stringListFromJson(row['open_issues_json'] as String?),
       actionItems: _actionItemsFromJson(row['action_items_json'] as String?),
@@ -357,6 +400,21 @@ class SqliteMeetingRepository implements MeetingRepository {
       transcriptS3Key: row['transcript_s3_key'] as String?,
       fileSizeBytes: row['recording_file_size_bytes'] as int?,
     );
+  }
+
+  RealtimeMinutesProgress? _realtimeProgressFromRow(Map<String, Object?> row) {
+    final progress = RealtimeMinutesProgress(
+      statusCode: row['realtime_status_code'] as int?,
+      percent: row['realtime_progress_percent'] as int?,
+      step: row['realtime_progress_step'] as String?,
+      message: row['realtime_progress_message'] as String?,
+      updatedAt: _dateTimeOrNull(
+        row['realtime_progress_updated_at'] as String?,
+      ),
+      completed: (row['realtime_progress_completed'] as int? ?? 0) == 1,
+      failed: (row['realtime_progress_failed'] as int? ?? 0) == 1,
+    );
+    return progress.isVisible || progress.statusCode != null ? progress : null;
   }
 
   TranscriptSegment _segmentFromRow(Map<String, Object?> row) {

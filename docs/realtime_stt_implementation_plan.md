@@ -18,7 +18,8 @@ Batch REST contract:
 
 Realtime contract:
 - `WS /ws/meetings/{meeting_id}/transcribe`
-- `POST /meetings/{meeting_id}/minutes-from-realtime`
+- `POST /meetings/{meeting_id}/minutes-from-realtime/start`
+- `GET /meetings/{meeting_id}/realtime-progress`
 
 WebSocket client start/resume payload:
 
@@ -43,7 +44,8 @@ Frontend implications:
 - `meeting_type` values sent to backend must be `one_on_one`, `small`, `medium`, or `unknown`.
 - Current `/upload-url` accepts one audio asset only: `file_extension` and `content_type`.
 - Batch summary/minutes starts through `/meetings/{meeting_id}/start`.
-- Realtime summary/minutes starts through `/meetings/{meeting_id}/minutes-from-realtime`.
+- Realtime summary/minutes starts through `/meetings/{meeting_id}/minutes-from-realtime/start`
+  and progresses through `/meetings/{meeting_id}/realtime-progress`.
 
 Implemented slices:
 - Split the previous single-file app into `app`, `core`, and `features` folders.
@@ -55,9 +57,13 @@ Implemented slices:
 - Open realtime STT WebSocket with backend UUID and send 16 kHz mono PCM chunks.
 - Parse backend `status`, `transcript.partial`, `transcript.final`, and `error` events into typed Dart events.
 - Pause/stop the realtime stream by closing audio and WebSocket resources.
-- Generate minutes through `POST /meetings/{meeting_id}/minutes-from-realtime`.
-- Store returned minutes metadata: `minutes_json_s3_key`, `minutes_markdown_s3_key`, and `pdf_s3_key`.
-- Match the backend mobile mockup's local minutes flow state: `uploading` while requesting minutes and `uploaded` after S3 minutes artifacts are returned.
+- Generate minutes through `POST /meetings/{meeting_id}/minutes-from-realtime/start`.
+- Poll realtime minutes progress and render `progress_percent` as `% 처리 중`.
+- Store returned minutes metadata after `/realtime-progress` completes:
+  `minutes_json_s3_key`, `minutes_markdown_s3_key`, `pdf_s3_key`, and
+  `docx_s3_key`.
+- Match the backend mobile mockup's local minutes flow state: `summarizing`
+  while requesting minutes and `uploaded` after S3 minutes artifacts are returned.
 - Save final transcript text to a local txt file when leaving a room.
 - Best-effort save an encoded `m4a` recording file for playback/upload while realtime PCM streaming is active.
 - Bind each active recording/WebSocket session to the room that started it, so
@@ -94,7 +100,9 @@ The mockup now contains executable test logic, not only static UI. Flutter shoul
 - Flutter equivalent should use `record` streaming with `RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1, echoCancel: true, noiseSuppress: true, autoGain: true)` if supported on the target platform.
 - Pause behavior in the mockup sends `pause`, closes the socket, and starts a new realtime stream when Record is pressed again.
 - Stop/save behavior sends `stop`, closes audio resources, and saves transcript text locally.
-- Store realtime minutes result metadata returned from `/minutes-from-realtime`: `minutes_json_s3_key`, `minutes_markdown_s3_key`, and `pdf_s3_key`.
+- Store realtime minutes result metadata after `/realtime-progress` completes:
+  `minutes_json_s3_key`, `minutes_markdown_s3_key`, `pdf_s3_key`, and
+  `docx_s3_key`.
 - Keep a debug-only test event path for UI validation while real microphone streaming is incomplete.
 - Add a local `uploading` or `generating` UI state so minutes generation is visually distinct from completed/uploaded.
 
@@ -126,7 +134,9 @@ The mockup now contains executable test logic, not only static UI. Flutter shoul
    - For EC2 dev over plain HTTP/Nginx port 80, launch Flutter with `API_BASE_URL=http://<ec2-host>` and `WS_BASE_URL=ws://<ec2-host>`.
    - Current EC2 dev endpoint: `API_BASE_URL=http://13.124.81.217:8080`, `WS_BASE_URL=ws://13.124.81.217:8080`.
    - For EC2 behind TLS, use `https://<domain>` and `wss://<domain>`.
-   - Verify microphone permission, WebSocket open, PCM chunks, partial/final transcript rendering, and `/minutes-from-realtime` response handling.
+   - Verify microphone permission, WebSocket open, PCM chunks, partial/final
+     transcript rendering, `/minutes-from-realtime/start`, and
+     `/realtime-progress` response handling.
 
 ## Platform Permission Checklist
 

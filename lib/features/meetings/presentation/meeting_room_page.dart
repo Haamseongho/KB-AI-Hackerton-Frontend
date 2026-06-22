@@ -85,6 +85,10 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                 segments: room.segments,
                 partialTranscript: room.partialTranscript,
               ),
+              if (room.realtimeMinutesProgress?.isVisible == true) ...[
+                const SizedBox(height: 16),
+                _RealtimeMinutesProgressCard(room: room),
+              ],
               if (_hasResources(room)) ...[
                 const SizedBox(height: 16),
                 _ResultResources(
@@ -960,6 +964,81 @@ class _BatchStepTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _RealtimeMinutesProgressCard extends StatelessWidget {
+  const _RealtimeMinutesProgressCard({required this.room});
+
+  final MeetingRoom room;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = room.realtimeMinutesProgress;
+    if (progress == null) return const SizedBox.shrink();
+    final percent = progress.safePercent;
+    final failed = progress.failed || room.status == MeetingStatus.failed;
+    final completed = progress.completed || percent >= 100;
+    final title = failed
+        ? '실시간 회의록 생성 실패'
+        : completed
+        ? '100% 완료'
+        : '$percent% 처리 중';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                Text(
+                  '$percent%',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: failed ? Colors.red : AppTheme.primary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: failed ? null : percent / 100,
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(99),
+              backgroundColor: const Color(0xFFE9EEF7),
+              color: failed ? Colors.red : AppTheme.primary,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              progress.message ?? _progressStepLabel(progress.step),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _progressStepLabel(String? step) {
+    return switch (step) {
+      'requested' => '회의록 생성을 준비하고 있습니다.',
+      'loading_segments' => '전사 segment를 불러오고 있습니다.',
+      'preprocessing_transcript' => '회의록 입력을 정리하고 있습니다.',
+      'llm_generating_minutes' => '요약과 액션 아이템을 생성하고 있습니다.',
+      'rendering_artifacts' => '회의록 파일을 생성하고 있습니다.',
+      'uploading_to_s3' => '회의록 파일을 S3에 저장하고 있습니다.',
+      'saving_result' => '결과 메타데이터를 저장하고 있습니다.',
+      'completed' => '회의록 생성이 완료되었습니다.',
+      'failed' => '회의록 생성에 실패했습니다.',
+      _ => '회의록 생성 상태를 확인하고 있습니다.',
+    };
   }
 }
 
