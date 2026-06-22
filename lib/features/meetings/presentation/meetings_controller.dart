@@ -12,8 +12,10 @@ import '../../recordings/data/audio_file_picker_service.dart';
 import '../../recordings/data/saved_recording_file_service.dart';
 import '../../transcription/data/transcript_download_service.dart';
 import '../../transcription/data/transcript_file_service.dart';
+import '../../meetings/data/calendar_event_service.dart';
 import '../../meetings/data/meeting_api.dart';
 import '../../meetings/data/pdf_download_service.dart';
+import '../domain/action_item.dart';
 import '../domain/batch_transcription_status.dart';
 import '../domain/meeting_repository.dart';
 import '../domain/meeting_room.dart';
@@ -41,6 +43,7 @@ class MeetingsController extends ChangeNotifier {
     TranscriptFileService? transcriptFileService,
     TranscriptDownloadService? transcriptDownloadService,
     PdfDownloadService? pdfDownloadService,
+    CalendarEventService? calendarEventService,
     Duration batchPollInterval = const Duration(seconds: 10),
   }) : _repository = repository,
        _api = api,
@@ -58,6 +61,7 @@ class MeetingsController extends ChangeNotifier {
        _transcriptDownloadService =
            transcriptDownloadService ?? TranscriptDownloadService(),
        _pdfDownloadService = pdfDownloadService ?? PdfDownloadService(),
+       _calendarEventService = calendarEventService ?? CalendarEventService(),
        _batchPollInterval = batchPollInterval;
 
   final MeetingRepository _repository;
@@ -70,6 +74,7 @@ class MeetingsController extends ChangeNotifier {
   final TranscriptFileService _transcriptFileService;
   final TranscriptDownloadService _transcriptDownloadService;
   final PdfDownloadService _pdfDownloadService;
+  final CalendarEventService _calendarEventService;
   final Duration _batchPollInterval;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<TranscriptionEvent>? _transcriptionSubscription;
@@ -91,6 +96,7 @@ class MeetingsController extends ChangeNotifier {
   bool isDownloadingDocx = false;
   bool isDownloadingTranscript = false;
   bool isRefreshingActionItems = false;
+  bool isAddingCalendarEvent = false;
   bool isStartingBatch = false;
   bool debugMode = true;
 
@@ -342,7 +348,7 @@ class MeetingsController extends ChangeNotifier {
     try {
       final payload = await _api.getMeetingActionItems(backendId);
       final updated = room.copyWith(
-        actionItems: _mapList(payload['action_items']),
+        actionItems: _actionItems(payload['action_items']),
         updatedAt: DateTime.now(),
       );
       await _saveAndSelect(updated, '캘린더용 액션 플랜을 업데이트했습니다.');
@@ -552,6 +558,10 @@ class MeetingsController extends ChangeNotifier {
       if (meetingStatus == MeetingStatus.completed) {
         _batchPollTimers.remove(localId)?.cancel();
         final result = await _api.getMeetingResult(backendId);
+        final actionItems = await _actionItemsFromBackendOrResult(
+          backendId,
+          result,
+        );
         await _saveKeepingSelection(
           room.copyWith(
             status: MeetingStatus.completed,
@@ -560,7 +570,7 @@ class MeetingsController extends ChangeNotifier {
             summary: result['summary'] as String?,
             decisions: _stringList(result['decisions']),
             openIssues: _stringList(result['open_issues']),
-            actionItems: _mapList(result['action_items']),
+            actionItems: actionItems,
             minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
             minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
             pdfS3Key: result['pdf_s3_key'] as String?,
@@ -794,13 +804,17 @@ class MeetingsController extends ChangeNotifier {
         backendMeetingId,
         segments: segments,
       );
+      final actionItems = await _actionItemsFromBackendOrResult(
+        backendMeetingId,
+        result,
+      );
       final updated = generating.copyWith(
         status: _statusAfterRealtimeMinutes(result),
         title: result['title'] as String?,
         summary: result['summary'] as String?,
         decisions: _stringList(result['decisions']),
         openIssues: _stringList(result['open_issues']),
-        actionItems: _mapList(result['action_items']),
+        actionItems: actionItems,
         minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
         minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
         pdfS3Key: result['pdf_s3_key'] as String?,
@@ -811,6 +825,64 @@ class MeetingsController extends ChangeNotifier {
       await _saveAndSelect(updated, '실시간 회의록 생성이 완료되었습니다.');
     } catch (error) {
       errorMessage = _userMessage(error);
+      notifyListeners();
+    }
+  }
+
+  Future<void> addActionItemToCalendar({
+    required int actionItemIndex,
+    required DateTime date,
+    required String title,
+  }) async {
+    final room = selectedRoom;
+    if (room == null) return;
+    if (actionItemIndex < 0 || actionItemIndex >= room.actionItems.length) {
+      errorMessage = '추가할 액션 아이템을 찾을 수 없습니다.';
+      notifyListeners();
+      return;
+    }
+
+    final trimmedTitle = title.trim();
+    if (trimmedTitle.isEmpty) {
+      errorMessage = '일정 내용을 입력해 주세요.';
+      notifyListeners();
+      return;
+    }
+
+    final startAt = DateTime(date.year, date.month, date.day);
+    final endAt = startAt.add(const Duration(days: 1));
+    final item = room.actionItems[actionItemIndex];
+    isAddingCalendarEvent = true;
+    errorMessage = null;
+    statusMessage = '캘린더에 일정을 추가하고 있습니다.';
+    notifyListeners();
+    try {
+      final eventId = await _calendarEventService.addEvent(
+        title: trimmedTitle,
+        startAt: startAt,
+        endAt: endAt,
+        allDay: true,
+        notes:
+            'VoiceDoc 회의: ${room.title}\n'
+            '회의 ID: ${room.meetingId}\n'
+            '담당자: ${item.displayOwner}',
+      );
+      final items = [...room.actionItems];
+      items[actionItemIndex] = item.copyWith(
+        task: trimmedTitle,
+        dueDateResolved: _dateOnly(startAt),
+        calendarEventId: eventId,
+        calendarAddedAt: DateTime.now(),
+      );
+      await _saveAndSelect(
+        room.copyWith(actionItems: items, updatedAt: DateTime.now()),
+        '캘린더 일정 추가 요청을 완료했습니다.',
+      );
+    } catch (error) {
+      errorMessage = _userMessage(error);
+      notifyListeners();
+    } finally {
+      isAddingCalendarEvent = false;
       notifyListeners();
     }
   }
@@ -1106,12 +1178,31 @@ class MeetingsController extends ChangeNotifier {
     return value.whereType<String>().toList(growable: false);
   }
 
-  List<Map<String, dynamic>> _mapList(Object? value) {
+  List<ActionItem> _actionItems(Object? value) {
     if (value is! List) return const [];
     return value
         .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
+        .map((item) => ActionItem.fromJson(Map<String, dynamic>.from(item)))
+        .where((item) => item.task.trim().isNotEmpty)
         .toList(growable: false);
+  }
+
+  Future<List<ActionItem>> _actionItemsFromBackendOrResult(
+    String backendMeetingId,
+    Map<String, dynamic> result,
+  ) async {
+    try {
+      final payload = await _api.getMeetingActionItems(backendMeetingId);
+      return _actionItems(payload['action_items']);
+    } catch (error) {
+      return _actionItems(result['action_items']);
+    }
+  }
+
+  String _dateOnly(DateTime date) {
+    return '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
   }
 
   @override

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kb_ai_hackerton_frontend/features/meetings/data/in_memory_meeting_repository.dart';
+import 'package:kb_ai_hackerton_frontend/features/meetings/domain/action_item.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_room.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_status.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_type.dart';
@@ -177,5 +178,45 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(partialY, lessThan(latestY));
     expect(latestY, lessThan(olderY));
+  });
+
+  testWidgets('shows one calendar button for the first dated action item', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final now = DateTime(2026, 6, 22);
+    final repository = InMemoryMeetingRepository(
+      rooms: [
+        MeetingRoom(
+          localId: 'local-actions',
+          meetingId: 'MTG-20260622-001',
+          title: '액션 아이템 회의',
+          meetingType: MeetingType.small,
+          status: MeetingStatus.completed,
+          createdAt: now,
+          updatedAt: now,
+          summary: '회의 요약',
+          actionItems: const [
+            ActionItem(
+              owner: 'spk_1',
+              task: '회의록 초안 공유',
+              dueDate: '다음 주 금요일',
+              dueDateResolved: '2026-06-26',
+            ),
+            ActionItem(task: 'PDF 템플릿 확인'),
+          ],
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(VoiceDocApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('액션 아이템 회의'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('회의록 초안 공유'), findsOneWidget);
+    expect(find.text('PDF 템플릿 확인'), findsOneWidget);
+    expect(find.text('일정 추가'), findsOneWidget);
   });
 }

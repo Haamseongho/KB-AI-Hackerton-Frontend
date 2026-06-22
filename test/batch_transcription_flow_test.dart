@@ -87,8 +87,8 @@ void main() {
     expect(saved?.summary, '배치 회의 요약');
     expect(saved?.decisions, ['배치 처리 방식을 확정합니다.']);
     expect(saved?.openIssues, ['실기기 성능 검증이 필요합니다.']);
-    expect(saved?.actionItems.single['owner'], '참가자1');
-    expect(saved?.actionItems.single['due_date_resolved'], '2026-06-19');
+    expect(saved?.actionItems.single.owner, '참가자1');
+    expect(saved?.actionItems.single.dueDateResolved, '2026-06-19');
     expect(saved?.pdfS3Key, 'pdf/backend-batch/minutes.pdf');
     expect(saved?.docxS3Key, 'docx/backend-batch/minutes.docx');
   });
@@ -224,6 +224,24 @@ class _FakeBatchMeetingApi extends MeetingApi {
       'minutes_markdown_s3_key': 'minutes/$backendMeetingId/minutes.md',
       'pdf_s3_key': 'pdf/$backendMeetingId/minutes.pdf',
       'docx_s3_key': 'docx/$backendMeetingId/minutes.docx',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> getMeetingActionItems(
+    String backendMeetingId,
+  ) async {
+    return {
+      'meeting_id': backendMeetingId,
+      'status': 'completed',
+      'action_items': [
+        {
+          'owner': '참가자1',
+          'task': '실기기 테스트',
+          'due_date': '금요일',
+          'due_date_resolved': '2026-06-19',
+        },
+      ],
     };
   }
 }

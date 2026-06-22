@@ -1,3 +1,4 @@
+import 'action_item.dart';
 import 'batch_transcription_status.dart';
 import 'meeting_status.dart';
 import 'meeting_type.dart';
@@ -66,7 +67,7 @@ class MeetingRoom {
   final String? batchErrorMessage;
   final List<String> decisions;
   final List<String> openIssues;
-  final List<Map<String, dynamic>> actionItems;
+  final List<ActionItem> actionItems;
 
   MeetingRoom copyWith({
     String? localId,
@@ -100,7 +101,7 @@ class MeetingRoom {
     bool clearBatchError = false,
     List<String>? decisions,
     List<String>? openIssues,
-    List<Map<String, dynamic>>? actionItems,
+    List<ActionItem>? actionItems,
   }) {
     return MeetingRoom(
       localId: localId ?? this.localId,

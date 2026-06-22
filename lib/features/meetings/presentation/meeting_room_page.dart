@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../domain/action_item.dart';
 import '../domain/batch_transcription_status.dart';
 import '../domain/meeting_room.dart';
 import '../domain/meeting_status.dart';
@@ -92,6 +93,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                   isDownloadingDocx: _controller.isDownloadingDocx,
                   isDownloadingTranscript: _controller.isDownloadingTranscript,
                   isRefreshingActionItems: _controller.isRefreshingActionItems,
+                  isAddingCalendarEvent: _controller.isAddingCalendarEvent,
                   onRealtimeTranscript: () =>
                       _controller.downloadAndOpenTranscript(batch: false),
                   onBatchTranscript: () =>
@@ -99,6 +101,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                   onPdf: _controller.downloadAndOpenPdf,
                   onDocx: _controller.downloadAndOpenDocx,
                   onRefreshActionItems: _controller.refreshActionItems,
+                  onAddActionItemToCalendar: _showAddActionItemDialog,
                 ),
               ],
             ] else ...[
@@ -123,6 +126,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                   isDownloadingDocx: _controller.isDownloadingDocx,
                   isDownloadingTranscript: _controller.isDownloadingTranscript,
                   isRefreshingActionItems: _controller.isRefreshingActionItems,
+                  isAddingCalendarEvent: _controller.isAddingCalendarEvent,
                   onRealtimeTranscript: () =>
                       _controller.downloadAndOpenTranscript(batch: false),
                   onBatchTranscript: () =>
@@ -130,6 +134,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                   onPdf: _controller.downloadAndOpenPdf,
                   onDocx: _controller.downloadAndOpenDocx,
                   onRefreshActionItems: _controller.refreshActionItems,
+                  onAddActionItemToCalendar: _showAddActionItemDialog,
                 ),
               ],
               if (_isBatchProcessing(room.status)) ...[
@@ -263,6 +268,90 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
         ],
       ),
     );
+  }
+
+  void _showAddActionItemDialog(int index, ActionItem item) {
+    final initialDate = item.resolvedDate ?? DateTime.now();
+    final dateController = TextEditingController(text: _dateOnly(initialDate));
+    final titleController = TextEditingController(text: item.task);
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('일정 추가'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: dateController,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: '날짜',
+                    suffixIcon: Icon(Icons.calendar_today_outlined),
+                  ),
+                  onTap: () async {
+                    final current =
+                        DateTime.tryParse(dateController.text) ?? initialDate;
+                    final picked = await showDatePicker(
+                      context: dialogContext,
+                      initialDate: current,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2035),
+                    );
+                    if (picked != null) {
+                      setDialogState(() {
+                        dateController.text = _dateOnly(picked);
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: titleController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: '일정 내용',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('취소'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final date = DateTime.tryParse(dateController.text);
+                  if (date == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('날짜를 확인해 주세요.')),
+                    );
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop();
+                  _controller.addActionItemToCalendar(
+                    actionItemIndex: index,
+                    date: date,
+                    title: titleController.text,
+                  );
+                },
+                child: const Text('캘린더에 추가'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _dateOnly(DateTime date) {
+    return '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
   }
 }
 
@@ -922,11 +1011,13 @@ class _ResultResources extends StatelessWidget {
     required this.isDownloadingDocx,
     required this.isDownloadingTranscript,
     required this.isRefreshingActionItems,
+    required this.isAddingCalendarEvent,
     required this.onRealtimeTranscript,
     required this.onBatchTranscript,
     required this.onPdf,
     required this.onDocx,
     required this.onRefreshActionItems,
+    required this.onAddActionItemToCalendar,
   });
 
   final MeetingRoom room;
@@ -934,11 +1025,13 @@ class _ResultResources extends StatelessWidget {
   final bool isDownloadingDocx;
   final bool isDownloadingTranscript;
   final bool isRefreshingActionItems;
+  final bool isAddingCalendarEvent;
   final VoidCallback onRealtimeTranscript;
   final VoidCallback onBatchTranscript;
   final VoidCallback onPdf;
   final VoidCallback onDocx;
   final VoidCallback onRefreshActionItems;
+  final void Function(int index, ActionItem item) onAddActionItemToCalendar;
 
   @override
   Widget build(BuildContext context) {
@@ -965,7 +1058,11 @@ class _ResultResources extends StatelessWidget {
                     _ResultList(title: '미결 사항', items: room.openIssues),
                   if (room.actionItems.isNotEmpty) ...[
                     const SizedBox(height: 14),
-                    _ActionItemsList(items: room.actionItems),
+                    _ActionItemsList(
+                      items: room.actionItems,
+                      isAddingCalendarEvent: isAddingCalendarEvent,
+                      onAddToCalendar: onAddActionItemToCalendar,
+                    ),
                   ],
                   if (room.backendId != null) ...[
                     const SizedBox(height: 12),
@@ -1085,27 +1182,126 @@ class _ResultList extends StatelessWidget {
 }
 
 class _ActionItemsList extends StatelessWidget {
-  const _ActionItemsList({required this.items});
+  const _ActionItemsList({
+    required this.items,
+    required this.isAddingCalendarEvent,
+    required this.onAddToCalendar,
+  });
 
-  final List<Map<String, dynamic>> items;
+  final List<ActionItem> items;
+  final bool isAddingCalendarEvent;
+  final void Function(int index, ActionItem item) onAddToCalendar;
 
   @override
   Widget build(BuildContext context) {
+    final calendarCandidateIndex = _calendarCandidateIndex(items);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('후속 조치', style: TextStyle(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 5),
-        ...items.map((item) {
-          final owner = item['owner']?.toString().trim();
-          final task = item['task'] ?? item['action'] ?? '-';
-          final due = item['due_date_resolved'] ?? item['due_date'] ?? '미정';
-          return Text(
-            '• ${owner == null || owner.isEmpty ? '담당자 미정' : owner}: '
-            '$task (기한: $due)',
-          );
-        }),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '후속 조치',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            Text(
+              '${items.length}개',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        for (var index = 0; index < items.length; index += 1)
+          _ActionItemRow(
+            index: index,
+            item: items[index],
+            isBusy: isAddingCalendarEvent,
+            showCalendarAction:
+                index == calendarCandidateIndex ||
+                items[index].isAddedToCalendar,
+            onAddToCalendar: onAddToCalendar,
+          ),
       ],
+    );
+  }
+
+  int? _calendarCandidateIndex(List<ActionItem> items) {
+    final resolvedIndex = items.indexWhere((item) => item.hasResolvedDueDate);
+    if (resolvedIndex != -1) return resolvedIndex;
+
+    final dueDateIndex = items.indexWhere((item) => item.hasDueDate);
+    if (dueDateIndex != -1) return dueDateIndex;
+
+    return null;
+  }
+}
+
+class _ActionItemRow extends StatelessWidget {
+  const _ActionItemRow({
+    required this.index,
+    required this.item,
+    required this.isBusy,
+    required this.showCalendarAction,
+    required this.onAddToCalendar,
+  });
+
+  final int index;
+  final ActionItem item;
+  final bool isBusy;
+  final bool showCalendarAction;
+  final void Function(int index, ActionItem item) onAddToCalendar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Icon(
+              Icons.check_circle_outline,
+              size: 17,
+              color: AppTheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.task,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${item.displayOwner} · 기한 ${item.displayDueDate}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          if (showCalendarAction) ...[
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: isBusy || item.isAddedToCalendar
+                  ? null
+                  : () => onAddToCalendar(index, item),
+              icon: Icon(
+                item.isAddedToCalendar
+                    ? Icons.event_available
+                    : Icons.add_circle_outline,
+                size: 16,
+              ),
+              label: Text(item.isAddedToCalendar ? '추가됨' : '일정 추가'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

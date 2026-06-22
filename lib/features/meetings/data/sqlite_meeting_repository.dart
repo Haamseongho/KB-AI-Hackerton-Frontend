@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../domain/action_item.dart';
 import '../domain/batch_transcription_status.dart';
 import '../domain/meeting_repository.dart';
 import '../domain/meeting_room.dart';
@@ -266,7 +267,9 @@ class SqliteMeetingRepository implements MeetingRepository {
       'batch_error_message': room.batchErrorMessage,
       'decisions_json': jsonEncode(room.decisions),
       'open_issues_json': jsonEncode(room.openIssues),
-      'action_items_json': jsonEncode(room.actionItems),
+      'action_items_json': jsonEncode(
+        room.actionItems.map((item) => item.toJson()).toList(growable: false),
+      ),
     };
   }
 
@@ -330,7 +333,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       batchErrorMessage: row['batch_error_message'] as String?,
       decisions: _stringListFromJson(row['decisions_json'] as String?),
       openIssues: _stringListFromJson(row['open_issues_json'] as String?),
-      actionItems: _mapListFromJson(row['action_items_json'] as String?),
+      actionItems: _actionItemsFromJson(row['action_items_json'] as String?),
     );
   }
 
@@ -397,14 +400,15 @@ class SqliteMeetingRepository implements MeetingRepository {
     }
   }
 
-  List<Map<String, dynamic>> _mapListFromJson(String? value) {
+  List<ActionItem> _actionItemsFromJson(String? value) {
     if (value == null || value.isEmpty) return const [];
     try {
       final decoded = jsonDecode(value);
       if (decoded is! List) return const [];
       return decoded
           .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
+          .map((item) => ActionItem.fromJson(Map<String, dynamic>.from(item)))
+          .where((item) => item.task.trim().isNotEmpty)
           .toList(growable: false);
     } on FormatException {
       return const [];
