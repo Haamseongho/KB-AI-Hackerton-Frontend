@@ -2,13 +2,16 @@ package com.kbds.aihackathon.voicedoc
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.provider.CalendarContract
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.Calendar
 import java.util.TimeZone
 
 class MainActivity : FlutterActivity() {
@@ -23,25 +26,34 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             calendarChannel
         ).setMethodCallHandler { call, result ->
-            if (call.method != "addEvent") {
-                result.notImplemented()
-                return@setMethodCallHandler
+            when (call.method) {
+                "addEvent" -> {
+                    val args = CalendarEventArgs(
+                        title = call.argument<String>("title")?.trim().orEmpty(),
+                        notes = call.argument<String>("notes"),
+                        startAtMillis = call.argument<Long>("startAtMillis"),
+                        endAtMillis = call.argument<Long>("endAtMillis"),
+                        startDate = call.argument<String>("startDate"),
+                        endDate = call.argument<String>("endDate"),
+                        allDay = call.argument<Boolean>("allDay") ?: true
+                    )
+
+                    if (args.title.isEmpty() || args.startAtMillis == null || args.endAtMillis == null) {
+                        result.error("INVALID_ARGUMENT", "일정 제목과 날짜를 확인해 주세요.", null)
+                        return@setMethodCallHandler
+                    }
+
+                    addCalendarEvent(args, result)
+                }
+                "openCalendar" -> {
+                    openCalendar(
+                        date = call.argument<String>("date"),
+                        dateMillis = call.argument<Long>("dateMillis"),
+                        result = result
+                    )
+                }
+                else -> result.notImplemented()
             }
-
-            val args = CalendarEventArgs(
-                title = call.argument<String>("title")?.trim().orEmpty(),
-                notes = call.argument<String>("notes"),
-                startAtMillis = call.argument<Long>("startAtMillis"),
-                endAtMillis = call.argument<Long>("endAtMillis"),
-                allDay = call.argument<Boolean>("allDay") ?: true
-            )
-
-            if (args.title.isEmpty() || args.startAtMillis == null || args.endAtMillis == null) {
-                result.error("INVALID_ARGUMENT", "일정 제목과 날짜를 확인해 주세요.", null)
-                return@setMethodCallHandler
-            }
-
-            addCalendarEvent(args, result)
         }
     }
 
@@ -96,14 +108,18 @@ class MainActivity : FlutterActivity() {
             return
         }
 
+        val eventStartAt = eventStartAt(args)
+        val eventEndAt = eventEndAt(args)
+        val eventTimeZone = if (args.allDay) "UTC" else TimeZone.getDefault().id
+
         val values = ContentValues().apply {
             put(CalendarContract.Events.CALENDAR_ID, calendarId)
             put(CalendarContract.Events.TITLE, args.title)
             put(CalendarContract.Events.DESCRIPTION, args.notes)
-            put(CalendarContract.Events.DTSTART, args.startAtMillis)
-            put(CalendarContract.Events.DTEND, args.endAtMillis)
+            put(CalendarContract.Events.DTSTART, eventStartAt)
+            put(CalendarContract.Events.DTEND, eventEndAt)
             put(CalendarContract.Events.ALL_DAY, if (args.allDay) 1 else 0)
-            put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+            put(CalendarContract.Events.EVENT_TIMEZONE, eventTimeZone)
         }
 
         try {
@@ -118,6 +134,49 @@ class MainActivity : FlutterActivity() {
             result.error("CALENDAR_PERMISSION_DENIED", "캘린더 접근 권한이 필요합니다.", null)
         } catch (error: IllegalArgumentException) {
             result.error("CALENDAR_SAVE_FAILED", "캘린더에 일정을 저장하지 못했습니다.", null)
+        }
+    }
+
+    private fun eventStartAt(args: CalendarEventArgs): Long {
+        if (args.allDay) {
+            dateToUtcMillis(args.startDate)?.let { return it }
+        }
+        return args.startAtMillis ?: 0L
+    }
+
+    private fun eventEndAt(args: CalendarEventArgs): Long {
+        if (args.allDay) {
+            dateToUtcMillis(args.endDate)?.let { return it }
+        }
+        return args.endAtMillis ?: eventStartAt(args)
+    }
+
+    private fun dateToUtcMillis(value: String?): Long? {
+        if (value == null) return null
+        val parts = value.split("-")
+        if (parts.size != 3) return null
+        val year = parts[0].toIntOrNull() ?: return null
+        val month = parts[1].toIntOrNull() ?: return null
+        val day = parts[2].toIntOrNull() ?: return null
+        return Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+            clear()
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, month - 1)
+            set(Calendar.DAY_OF_MONTH, day)
+        }.timeInMillis
+    }
+
+    private fun openCalendar(date: String?, dateMillis: Long?, result: MethodChannel.Result) {
+        val targetMillis = dateToUtcMillis(date) ?: dateMillis ?: System.currentTimeMillis()
+        val uri = Uri.parse("${CalendarContract.CONTENT_URI}/time/$targetMillis")
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        try {
+            startActivity(intent)
+            result.success(true)
+        } catch (error: Exception) {
+            result.error("CALENDAR_OPEN_FAILED", "캘린더 앱을 열지 못했습니다.", null)
         }
     }
 
@@ -158,6 +217,8 @@ class MainActivity : FlutterActivity() {
         val notes: String?,
         val startAtMillis: Long?,
         val endAtMillis: Long?,
+        val startDate: String?,
+        val endDate: String?,
         val allDay: Boolean
     )
 }

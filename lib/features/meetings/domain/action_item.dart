@@ -29,6 +29,8 @@ class ActionItem {
     return value != null && value.isNotEmpty;
   }
 
+  bool get hasCalendarCandidateDate => hasResolvedDueDate || hasDueDate;
+
   String get displayOwner {
     return displaySpeakerLabel(owner, fallback: '담당자 미정');
   }

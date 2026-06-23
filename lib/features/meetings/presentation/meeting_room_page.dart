@@ -328,7 +328,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                 child: const Text('취소'),
               ),
               FilledButton(
-                onPressed: () {
+                onPressed: () async {
                   final date = DateTime.tryParse(dateController.text);
                   if (date == null) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -337,11 +337,14 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                     return;
                   }
                   Navigator.of(dialogContext).pop();
-                  _controller.addActionItemToCalendar(
+                  final added = await _controller.addActionItemToCalendar(
                     actionItemIndex: index,
                     date: date,
                     title: titleController.text,
                   );
+                  if (added && mounted) {
+                    _showOpenCalendarDialog(date);
+                  }
                 },
                 child: const Text('캘린더에 추가'),
               ),
@@ -349,6 +352,30 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
           ),
         );
       },
+    );
+  }
+
+  void _showOpenCalendarDialog(DateTime date) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('일정이 추가되었습니다'),
+        content: const Text('기본 캘린더 앱에서 등록된 일정을 확인할까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('나중에'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _controller.openCalendar(date: date);
+            },
+            icon: const Icon(Icons.open_in_new, size: 18),
+            label: const Text('캘린더 열기'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1273,7 +1300,6 @@ class _ActionItemsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final calendarCandidateIndex = _calendarCandidateIndex(items);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1298,22 +1324,12 @@ class _ActionItemsList extends StatelessWidget {
             item: items[index],
             isBusy: isAddingCalendarEvent,
             showCalendarAction:
-                index == calendarCandidateIndex ||
+                items[index].hasCalendarCandidateDate ||
                 items[index].isAddedToCalendar,
             onAddToCalendar: onAddToCalendar,
           ),
       ],
     );
-  }
-
-  int? _calendarCandidateIndex(List<ActionItem> items) {
-    final resolvedIndex = items.indexWhere((item) => item.hasResolvedDueDate);
-    if (resolvedIndex != -1) return resolvedIndex;
-
-    final dueDateIndex = items.indexWhere((item) => item.hasDueDate);
-    if (dueDateIndex != -1) return dueDateIndex;
-
-    return null;
   }
 }
 

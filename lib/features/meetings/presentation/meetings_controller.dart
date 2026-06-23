@@ -945,24 +945,24 @@ class MeetingsController extends ChangeNotifier {
     }
   }
 
-  Future<void> addActionItemToCalendar({
+  Future<bool> addActionItemToCalendar({
     required int actionItemIndex,
     required DateTime date,
     required String title,
   }) async {
     final room = selectedRoom;
-    if (room == null) return;
+    if (room == null) return false;
     if (actionItemIndex < 0 || actionItemIndex >= room.actionItems.length) {
       errorMessage = '추가할 액션 아이템을 찾을 수 없습니다.';
       notifyListeners();
-      return;
+      return false;
     }
 
     final trimmedTitle = title.trim();
     if (trimmedTitle.isEmpty) {
       errorMessage = '일정 내용을 입력해 주세요.';
       notifyListeners();
-      return;
+      return false;
     }
 
     final startAt = DateTime(date.year, date.month, date.day);
@@ -992,13 +992,24 @@ class MeetingsController extends ChangeNotifier {
       );
       await _saveAndSelect(
         room.copyWith(actionItems: items, updatedAt: DateTime.now()),
-        '캘린더 일정 추가 요청을 완료했습니다.',
+        '캘린더에 일정을 추가했습니다.',
       );
+      return true;
     } catch (error) {
       errorMessage = _userMessage(error);
       notifyListeners();
+      return false;
     } finally {
       isAddingCalendarEvent = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> openCalendar({DateTime? date}) async {
+    try {
+      await _calendarEventService.openCalendar(date: date);
+    } catch (error) {
+      errorMessage = _userMessage(error);
       notifyListeners();
     }
   }

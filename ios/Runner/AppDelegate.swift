@@ -18,11 +18,18 @@ import UIKit
         binaryMessenger: registrar.messenger()
       )
       channel.setMethodCallHandler { [weak self] call, result in
-        guard call.method == "addEvent" else {
+        if call.method == "addEvent" {
+          self?.addCalendarEvent(call: call, result: result)
+          return
+        }
+        if call.method == "openCalendar" {
+          self?.openCalendar(call: call, result: result)
+          return
+        }
+        else {
           result(FlutterMethodNotImplemented)
           return
         }
-        self?.addCalendarEvent(call: call, result: result)
       }
     }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
@@ -93,6 +100,34 @@ import UIKit
     eventStore.requestAccess(to: .event) { granted, _ in
       DispatchQueue.main.async {
         completion(granted)
+      }
+    }
+  }
+
+  private func openCalendar(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let args = call.arguments as? [String: Any]
+    let millis = numberValue(args?["dateMillis"])?.doubleValue
+    let seconds = millis == nil
+      ? Date().timeIntervalSinceReferenceDate
+      : Date(timeIntervalSince1970: millis! / 1000).timeIntervalSinceReferenceDate
+    guard let url = URL(string: "calshow:\(seconds)") else {
+      result(FlutterError(
+        code: "CALENDAR_OPEN_FAILED",
+        message: "캘린더 앱을 열지 못했습니다.",
+        details: nil
+      ))
+      return
+    }
+
+    UIApplication.shared.open(url) { opened in
+      if opened {
+        result(true)
+      } else {
+        result(FlutterError(
+          code: "CALENDAR_OPEN_FAILED",
+          message: "캘린더 앱을 열지 못했습니다.",
+          details: nil
+        ))
       }
     }
   }

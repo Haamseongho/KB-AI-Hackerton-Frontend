@@ -183,7 +183,7 @@ void main() {
     expect(latestY, lessThan(olderY));
   });
 
-  testWidgets('shows one calendar button for the first dated action item', (
+  testWidgets('shows calendar buttons for every dated action item', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -208,6 +208,11 @@ void main() {
               dueDateResolved: '2026-06-26',
             ),
             ActionItem(task: 'PDF 템플릿 확인'),
+            ActionItem(
+              owner: '참석자 3',
+              task: '휴가 공유 캘린더 확인',
+              dueDate: '다음 주 월요일',
+            ),
           ],
         ),
       ],
@@ -220,8 +225,9 @@ void main() {
 
     expect(find.text('회의록 초안 공유'), findsOneWidget);
     expect(find.text('PDF 템플릿 확인'), findsOneWidget);
+    expect(find.text('휴가 공유 캘린더 확인'), findsOneWidget);
     expect(find.textContaining('참석자 2'), findsOneWidget);
     expect(find.textContaining('spk_1'), findsNothing);
-    expect(find.text('일정 추가'), findsOneWidget);
+    expect(find.text('일정 추가'), findsNWidgets(2));
   });
 }
