@@ -1,3 +1,5 @@
+import 'speaker_label.dart';
+
 class ActionItem {
   const ActionItem({
     this.owner,
@@ -28,8 +30,7 @@ class ActionItem {
   }
 
   String get displayOwner {
-    final value = owner?.trim();
-    return value == null || value.isEmpty ? '담당자 미정' : value;
+    return displaySpeakerLabel(owner, fallback: '담당자 미정');
   }
 
   String get displayDueDate {

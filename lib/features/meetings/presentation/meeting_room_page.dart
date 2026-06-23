@@ -1466,7 +1466,7 @@ class _TranscriptLine extends StatelessWidget {
                 children: [
                   if (segment.speaker != null)
                     TextSpan(
-                      text: '${segment.speaker} ',
+                      text: '${segment.displaySpeaker} ',
                       style: const TextStyle(
                         color: AppTheme.primary,
                         fontWeight: FontWeight.w800,

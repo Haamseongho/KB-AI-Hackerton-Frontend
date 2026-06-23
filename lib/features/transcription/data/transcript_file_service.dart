@@ -43,7 +43,7 @@ class TranscriptFileService {
     for (final segment in segments) {
       buffer
         ..write('[${_time(segment.startedAt)}] ')
-        ..write('${segment.speaker ?? '화자 1'}: ')
+        ..write('${segment.displaySpeaker}: ')
         ..writeln(segment.text)
         ..writeln();
     }

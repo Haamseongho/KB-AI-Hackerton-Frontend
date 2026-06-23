@@ -1,3 +1,5 @@
+import 'speaker_label.dart';
+
 class TranscriptSegment {
   const TranscriptSegment({
     required this.id,
@@ -18,4 +20,6 @@ class TranscriptSegment {
   final String? speaker;
   final double? confidenceScore;
   final bool isLowConfidence;
+
+  String get displaySpeaker => displaySpeakerLabel(speaker);
 }

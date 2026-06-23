@@ -146,6 +146,7 @@ void main() {
             TranscriptSegment(
               id: 'older',
               text: '이전 확정 문장',
+              speaker: 'spk_0',
               startedAt: Duration(seconds: 1),
               endedAt: Duration(seconds: 2),
               isFinal: true,
@@ -171,10 +172,12 @@ void main() {
     expect(find.text('나가기'), findsOneWidget);
     expect(find.text('자동 스크롤'), findsNothing);
     expect(find.text('최신 대화 상단 고정'), findsOneWidget);
+    expect(find.textContaining('참석자 1'), findsOneWidget);
+    expect(find.textContaining('spk_0'), findsNothing);
 
     final partialY = tester.getTopLeft(find.text('현재 말하는 내용')).dy;
-    final latestY = tester.getTopLeft(find.text('최근 확정 문장')).dy;
-    final olderY = tester.getTopLeft(find.text('이전 확정 문장')).dy;
+    final latestY = tester.getTopLeft(find.textContaining('최근 확정 문장')).dy;
+    final olderY = tester.getTopLeft(find.textContaining('이전 확정 문장')).dy;
     expect(tester.takeException(), isNull);
     expect(partialY, lessThan(latestY));
     expect(latestY, lessThan(olderY));
@@ -217,6 +220,8 @@ void main() {
 
     expect(find.text('회의록 초안 공유'), findsOneWidget);
     expect(find.text('PDF 템플릿 확인'), findsOneWidget);
+    expect(find.textContaining('참석자 2'), findsOneWidget);
+    expect(find.textContaining('spk_1'), findsNothing);
     expect(find.text('일정 추가'), findsOneWidget);
   });
 }
