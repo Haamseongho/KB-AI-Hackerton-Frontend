@@ -122,8 +122,6 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
               if (room.status == MeetingStatus.completed ||
                   _hasResources(room)) ...[
                 const SizedBox(height: 14),
-                _TranscriptPreview(segments: room.segments),
-                const SizedBox(height: 14),
                 _ResultResources(
                   room: room,
                   isDownloadingPdf: _controller.isDownloadingPdf,
@@ -1066,47 +1064,6 @@ class _RealtimeMinutesProgressCard extends StatelessWidget {
       'failed' => '회의록 생성에 실패했습니다.',
       _ => '회의록 생성 상태를 확인하고 있습니다.',
     };
-  }
-}
-
-class _TranscriptPreview extends StatelessWidget {
-  const _TranscriptPreview({required this.segments});
-
-  final List<TranscriptSegment> segments;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  '전사문 미리보기',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const Spacer(),
-                Text(
-                  '${segments.length}개 발화',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (segments.isEmpty)
-              Text(
-                '앱에 저장된 미리보기 전사문이 없습니다.',
-                style: Theme.of(context).textTheme.bodySmall,
-              )
-            else
-              ...segments.take(5).map(_TranscriptLine.new),
-          ],
-        ),
-      ),
-    );
   }
 }
 
