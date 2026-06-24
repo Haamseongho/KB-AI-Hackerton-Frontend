@@ -172,7 +172,7 @@ void main() {
     expect(find.text('나가기'), findsOneWidget);
     expect(find.text('자동 스크롤'), findsNothing);
     expect(find.text('최신 대화 상단 고정'), findsOneWidget);
-    expect(find.textContaining('참석자 1'), findsOneWidget);
+    expect(find.textContaining('참가자 1'), findsOneWidget);
     expect(find.textContaining('spk_0'), findsNothing);
 
     final partialY = tester.getTopLeft(find.text('현재 말하는 내용')).dy;
@@ -209,7 +209,7 @@ void main() {
             ),
             ActionItem(task: 'PDF 템플릿 확인'),
             ActionItem(
-              owner: '참석자 3',
+              owner: '참가자 3',
               task: '휴가 공유 캘린더 확인',
               dueDate: '다음 주 월요일',
             ),
@@ -226,7 +226,7 @@ void main() {
     expect(find.text('회의록 초안 공유'), findsOneWidget);
     expect(find.text('PDF 템플릿 확인'), findsOneWidget);
     expect(find.text('휴가 공유 캘린더 확인'), findsOneWidget);
-    expect(find.textContaining('참석자 2'), findsOneWidget);
+    expect(find.textContaining('참가자 2'), findsOneWidget);
     expect(find.textContaining('spk_1'), findsNothing);
     expect(find.text('일정 추가'), findsNWidgets(2));
   });

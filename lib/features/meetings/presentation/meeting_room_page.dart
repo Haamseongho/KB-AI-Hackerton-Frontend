@@ -8,6 +8,7 @@ import '../domain/meeting_status.dart';
 import '../domain/meeting_workflow.dart';
 import '../domain/transcript_segment.dart';
 import 'meetings_controller.dart';
+import 'widgets/meeting_chat_fab.dart';
 import 'widgets/status_chip.dart';
 
 class MeetingRoomPage extends StatefulWidget {
@@ -51,6 +52,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
     final anotherRoomRecording = _controller.isRecordingAnotherRoom(
       room.localId,
     );
+    final chatEnabled = _isChatAvailable(room);
 
     return Scaffold(
       appBar: _RoomHeader(
@@ -160,6 +162,10 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
               onLeave: _showLeaveDialog,
             )
           : null,
+      floatingActionButton: MeetingChatFab(
+        enabled: chatEnabled,
+        onPressed: chatEnabled ? () => _showMeetingChat(room) : null,
+      ),
     );
   }
 
@@ -172,6 +178,21 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
         room.pdfS3Key != null ||
         room.docxS3Key != null ||
         room.segments.isNotEmpty;
+  }
+
+  bool _isChatAvailable(MeetingRoom room) {
+    final minutesCompleted =
+        room.status == MeetingStatus.completed ||
+        room.realtimeMinutesProgress?.completed == true;
+    final hasMinutesResult =
+        room.summary != null ||
+        room.decisions.isNotEmpty ||
+        room.openIssues.isNotEmpty ||
+        room.actionItems.isNotEmpty ||
+        room.minutesMarkdownS3Key != null ||
+        room.pdfS3Key != null ||
+        room.docxS3Key != null;
+    return minutesCompleted && hasMinutesResult;
   }
 
   bool _isBatchProcessing(MeetingStatus status) {
@@ -381,6 +402,16 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
     return '${date.year.toString().padLeft(4, '0')}-'
         '${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}';
+  }
+
+  void _showMeetingChat(MeetingRoom room) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => MeetingChatSheet(room: room),
+    );
   }
 }
 
