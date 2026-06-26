@@ -184,6 +184,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
     final minutesCompleted =
         room.status == MeetingStatus.completed ||
         room.realtimeMinutesProgress?.completed == true;
+    final hasBackendMeeting = room.backendId != null;
     final hasMinutesResult =
         room.summary != null ||
         room.decisions.isNotEmpty ||
@@ -192,7 +193,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
         room.minutesMarkdownS3Key != null ||
         room.pdfS3Key != null ||
         room.docxS3Key != null;
-    return minutesCompleted && hasMinutesResult;
+    return minutesCompleted && hasBackendMeeting && hasMinutesResult;
   }
 
   bool _isBatchProcessing(MeetingStatus status) {
@@ -410,7 +411,11 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => MeetingChatSheet(room: room),
+      builder: (sheetContext) => MeetingChatSheet(
+        room: room,
+        onLoadHistory: _controller.getQaHistory,
+        onAskQuestion: _controller.askQaQuestion,
+      ),
     );
   }
 }

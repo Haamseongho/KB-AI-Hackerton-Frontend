@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../../../core/network/api_client.dart';
 import '../domain/meeting_type.dart';
+import '../domain/qa_message.dart';
 
 class MeetingApi {
   MeetingApi({ApiClient? client}) : _client = client ?? ApiClient();
@@ -37,6 +38,32 @@ class MeetingApi {
 
   Future<Map<String, dynamic>> getMeetingActionItems(String backendMeetingId) {
     return _client.getJson('/meetings/$backendMeetingId/action-items');
+  }
+
+  Future<List<QaMessage>> getQaHistory(String backendMeetingId) async {
+    final payload = await _client.getJson(
+      '/meetings/$backendMeetingId/qa/messages',
+    );
+    final messages = payload['messages'];
+    if (messages is! List) return const [];
+    return messages
+        .whereType<Map>()
+        .map(
+          (item) => QaMessage.fromHistoryJson(Map<String, dynamic>.from(item)),
+        )
+        .toList(growable: false);
+  }
+
+  Future<QaMessage> askQaQuestion(
+    String backendMeetingId, {
+    required String question,
+  }) async {
+    final payload = await _client.postJson(
+      '/meetings/$backendMeetingId/qa/messages',
+      body: {'question': question},
+      timeout: const Duration(seconds: 60),
+    );
+    return QaMessage.fromAnswerJson(payload);
   }
 
   Future<Map<String, dynamic>> getJob(String jobId) {

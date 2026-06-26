@@ -26,6 +26,7 @@ class ApiClient {
   Future<Map<String, dynamic>> postJson(
     String path, {
     Map<String, dynamic>? body,
+    Duration timeout = const Duration(seconds: 15),
   }) async {
     final response = await _client
         .post(
@@ -33,7 +34,7 @@ class ApiClient {
           headers: {'Content-Type': 'application/json'},
           body: body == null ? null : jsonEncode(body),
         )
-        .timeout(const Duration(seconds: 15));
+        .timeout(timeout);
     return _decodeMap(response);
   }
 

@@ -22,6 +22,7 @@ import '../domain/meeting_room.dart';
 import '../domain/meeting_status.dart';
 import '../domain/meeting_type.dart';
 import '../domain/meeting_workflow.dart';
+import '../domain/qa_message.dart';
 import '../domain/realtime_minutes_progress.dart';
 import '../domain/recording_asset.dart';
 import '../domain/transcript_segment.dart';
@@ -509,6 +510,17 @@ class MeetingsController extends ChangeNotifier {
     await _pollBatchJob(room.localId);
   }
 
+  Future<List<QaMessage>> getQaHistory(String backendMeetingId) {
+    return _api.getQaHistory(backendMeetingId);
+  }
+
+  Future<QaMessage> askQaQuestion(
+    String backendMeetingId, {
+    required String question,
+  }) {
+    return _api.askQaQuestion(backendMeetingId, question: question);
+  }
+
   void _scheduleBatchPoll(String localId, {bool immediate = false}) {
     _batchPollTimers.remove(localId)?.cancel();
     if (immediate) {
@@ -581,6 +593,8 @@ class MeetingsController extends ChangeNotifier {
             decisions: _stringList(result['decisions']),
             openIssues: _stringList(result['open_issues']),
             actionItems: actionItems,
+            preprocessedTranscriptS3Key:
+                result['preprocessed_transcript_s3_key'] as String?,
             minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
             minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
             pdfS3Key: result['pdf_s3_key'] as String?,
@@ -901,6 +915,8 @@ class MeetingsController extends ChangeNotifier {
             decisions: _stringList(result['decisions']),
             openIssues: _stringList(result['open_issues']),
             actionItems: actionItems,
+            preprocessedTranscriptS3Key:
+                result['preprocessed_transcript_s3_key'] as String?,
             minutesJsonS3Key: result['minutes_json_s3_key'] as String?,
             minutesMarkdownS3Key: result['minutes_markdown_s3_key'] as String?,
             pdfS3Key: result['pdf_s3_key'] as String?,

@@ -22,7 +22,7 @@ class SqliteMeetingRepository implements MeetingRepository {
   SqliteMeetingRepository({Database? database}) : _database = database;
 
   static const _databaseName = 'voice_doc_flutter.db';
-  static const _databaseVersion = 8;
+  static const _databaseVersion = 9;
 
   Database? _database;
 
@@ -138,6 +138,7 @@ class SqliteMeetingRepository implements MeetingRepository {
         stream_session_id TEXT,
         stream_segment_count INTEGER NOT NULL,
         transcript_file_path TEXT,
+        preprocessed_transcript_s3_key TEXT,
         minutes_json_s3_key TEXT,
         minutes_markdown_s3_key TEXT,
         pdf_s3_key TEXT,
@@ -257,6 +258,11 @@ class SqliteMeetingRepository implements MeetingRepository {
         'ALTER TABLE meetings ADD COLUMN realtime_progress_failed INTEGER NOT NULL DEFAULT 0',
       );
     }
+    if (oldVersion < 9) {
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN preprocessed_transcript_s3_key TEXT',
+      );
+    }
   }
 
   Map<String, Object?> _meetingRow(MeetingRoom room) {
@@ -278,6 +284,7 @@ class SqliteMeetingRepository implements MeetingRepository {
       'stream_session_id': room.streamSessionId,
       'stream_segment_count': room.streamSegmentCount,
       'transcript_file_path': room.transcriptFilePath,
+      'preprocessed_transcript_s3_key': room.preprocessedTranscriptS3Key,
       'minutes_json_s3_key': room.minutesJsonS3Key,
       'minutes_markdown_s3_key': room.minutesMarkdownS3Key,
       'pdf_s3_key': room.pdfS3Key,
@@ -365,6 +372,8 @@ class SqliteMeetingRepository implements MeetingRepository {
       streamSessionId: row['stream_session_id'] as String?,
       streamSegmentCount: row['stream_segment_count'] as int? ?? 0,
       transcriptFilePath: row['transcript_file_path'] as String?,
+      preprocessedTranscriptS3Key:
+          row['preprocessed_transcript_s3_key'] as String?,
       minutesJsonS3Key: row['minutes_json_s3_key'] as String?,
       minutesMarkdownS3Key: row['minutes_markdown_s3_key'] as String?,
       pdfS3Key: row['pdf_s3_key'] as String?,

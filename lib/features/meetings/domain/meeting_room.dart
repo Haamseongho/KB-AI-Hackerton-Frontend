@@ -27,6 +27,7 @@ class MeetingRoom {
     this.streamSessionId,
     this.streamSegmentCount = 0,
     this.transcriptFilePath,
+    this.preprocessedTranscriptS3Key,
     this.minutesJsonS3Key,
     this.minutesMarkdownS3Key,
     this.pdfS3Key,
@@ -59,6 +60,7 @@ class MeetingRoom {
   final String? streamSessionId;
   final int streamSegmentCount;
   final String? transcriptFilePath;
+  final String? preprocessedTranscriptS3Key;
   final String? minutesJsonS3Key;
   final String? minutesMarkdownS3Key;
   final String? pdfS3Key;
@@ -92,6 +94,7 @@ class MeetingRoom {
     String? streamSessionId,
     int? streamSegmentCount,
     String? transcriptFilePath,
+    String? preprocessedTranscriptS3Key,
     String? minutesJsonS3Key,
     String? minutesMarkdownS3Key,
     String? pdfS3Key,
@@ -129,6 +132,8 @@ class MeetingRoom {
       streamSessionId: streamSessionId ?? this.streamSessionId,
       streamSegmentCount: streamSegmentCount ?? this.streamSegmentCount,
       transcriptFilePath: transcriptFilePath ?? this.transcriptFilePath,
+      preprocessedTranscriptS3Key:
+          preprocessedTranscriptS3Key ?? this.preprocessedTranscriptS3Key,
       minutesJsonS3Key: minutesJsonS3Key ?? this.minutesJsonS3Key,
       minutesMarkdownS3Key: minutesMarkdownS3Key ?? this.minutesMarkdownS3Key,
       pdfS3Key: pdfS3Key ?? this.pdfS3Key,
