@@ -114,6 +114,8 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
               _BatchOverview(
                 room: room,
                 isStarting: _controller.isStartingBatch,
+                canRefresh: _controller.canRefreshBatchStatus,
+                refreshLabel: _controller.batchRefreshButtonLabel,
                 onStart: _showBatchDialog,
                 onRefresh: _controller.refreshBatchStatus,
               ),
@@ -758,12 +760,16 @@ class _BatchOverview extends StatelessWidget {
   const _BatchOverview({
     required this.room,
     required this.isStarting,
+    required this.canRefresh,
+    required this.refreshLabel,
     required this.onStart,
     required this.onRefresh,
   });
 
   final MeetingRoom room;
   final bool isStarting;
+  final bool canRefresh;
+  final String refreshLabel;
   final VoidCallback onStart;
   final VoidCallback onRefresh;
 
@@ -810,9 +816,9 @@ class _BatchOverview extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: onRefresh,
+                  onPressed: canRefresh ? onRefresh : null,
                   icon: const Icon(Icons.refresh),
-                  label: const Text('상태 새로고침'),
+                  label: Text(refreshLabel),
                 ),
               ),
             ] else ...[

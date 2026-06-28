@@ -47,6 +47,7 @@ class MeetingsController extends ChangeNotifier {
     PdfDownloadService? pdfDownloadService,
     CalendarEventService? calendarEventService,
     Duration batchPollInterval = const Duration(seconds: 10),
+    Duration batchRefreshCooldown = const Duration(seconds: 10),
     Duration realtimeMinutesPollInterval = const Duration(milliseconds: 1500),
   }) : _repository = repository,
        _api = api,
@@ -66,6 +67,7 @@ class MeetingsController extends ChangeNotifier {
        _pdfDownloadService = pdfDownloadService ?? PdfDownloadService(),
        _calendarEventService = calendarEventService ?? CalendarEventService(),
        _batchPollInterval = batchPollInterval,
+       _batchRefreshCooldown = batchRefreshCooldown,
        _realtimeMinutesPollInterval = realtimeMinutesPollInterval;
 
   final MeetingRepository _repository;
@@ -80,10 +82,13 @@ class MeetingsController extends ChangeNotifier {
   final PdfDownloadService _pdfDownloadService;
   final CalendarEventService _calendarEventService;
   final Duration _batchPollInterval;
+  final Duration _batchRefreshCooldown;
   final Duration _realtimeMinutesPollInterval;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<TranscriptionEvent>? _transcriptionSubscription;
   DateTime? _streamStartedAt;
+  DateTime? _nextManualBatchRefreshAt;
+  Timer? _batchRefreshCooldownTimer;
   String? _activeRecordingLocalId;
   Future<void> _transcriptionEventQueue = Future.value();
   final Map<String, Future<String>> _backendCreateFutures = {};
@@ -108,6 +113,33 @@ class MeetingsController extends ChangeNotifier {
   bool debugMode = true;
 
   String? get activeRecordingLocalId => _activeRecordingLocalId;
+
+  int get batchRefreshCooldownSeconds {
+    final nextRefreshAt = _nextManualBatchRefreshAt;
+    if (nextRefreshAt == null) return 0;
+    final remaining = nextRefreshAt.difference(DateTime.now());
+    if (remaining <= Duration.zero) return 0;
+    return (remaining.inMilliseconds / 1000).ceil();
+  }
+
+  bool get canRefreshBatchStatus {
+    final room = selectedRoom;
+    if (room == null || room.batchJobId == null) return false;
+    if (_batchPollingLocalIds.contains(room.localId)) return false;
+    return batchRefreshCooldownSeconds == 0;
+  }
+
+  String get batchRefreshButtonLabel {
+    final cooldownSeconds = batchRefreshCooldownSeconds;
+    if (cooldownSeconds > 0) {
+      return '상태 새로고침 ($cooldownSeconds초)';
+    }
+    final room = selectedRoom;
+    if (room != null && _batchPollingLocalIds.contains(room.localId)) {
+      return '상태 조회 중';
+    }
+    return '상태 새로고침';
+  }
 
   bool isRecordingAnotherRoom(String localId) {
     final activeLocalId = _activeRecordingLocalId;
@@ -506,8 +538,30 @@ class MeetingsController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final cooldownSeconds = batchRefreshCooldownSeconds;
+    if (cooldownSeconds > 0) {
+      statusMessage = '$cooldownSeconds초 후 다시 새로고침할 수 있습니다.';
+      notifyListeners();
+      return;
+    }
+    if (_batchPollingLocalIds.contains(room.localId)) {
+      statusMessage = '상태 조회 중입니다.';
+      notifyListeners();
+      return;
+    }
+    _startBatchRefreshCooldown();
     _batchPollTimers.remove(room.localId)?.cancel();
     await _pollBatchJob(room.localId);
+  }
+
+  void _startBatchRefreshCooldown() {
+    _batchRefreshCooldownTimer?.cancel();
+    _nextManualBatchRefreshAt = DateTime.now().add(_batchRefreshCooldown);
+    _batchRefreshCooldownTimer = Timer(_batchRefreshCooldown, () {
+      _nextManualBatchRefreshAt = null;
+      notifyListeners();
+    });
+    notifyListeners();
   }
 
   Future<List<QaMessage>> getQaHistory(String backendMeetingId) {
@@ -1382,6 +1436,7 @@ class MeetingsController extends ChangeNotifier {
     for (final timer in _batchPollTimers.values) {
       timer.cancel();
     }
+    _batchRefreshCooldownTimer?.cancel();
     for (final timer in _realtimeMinutesPollTimers.values) {
       timer.cancel();
     }

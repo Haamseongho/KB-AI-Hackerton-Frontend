@@ -175,6 +175,45 @@ void main() {
       expect(saved?.batchErrorMessage, isNull);
     },
   );
+
+  test('throttles manual batch status refresh for ten seconds', () async {
+    final now = DateTime(2026, 6, 28);
+    final room = MeetingRoom(
+      localId: 'local-batch-throttle',
+      meetingId: 'MTG-20260628-011',
+      backendId: 'backend-batch-throttle',
+      title: '배치 새로고침 테스트',
+      meetingType: MeetingType.small,
+      status: MeetingStatus.queued,
+      createdAt: now,
+      updatedAt: now,
+      batchJobId: 'job-batch',
+      batchStatus: BatchTranscriptionStatus.queued,
+    );
+    final repository = InMemoryMeetingRepository(rooms: [room]);
+    final api = _CountingBatchStatusApi();
+    final controller = MeetingsController(
+      repository: repository,
+      api: api,
+      transcriptionSocketClient: _FakeTranscriptionSocketClient(),
+      audioStreamingService: _FakeRealtimeAudioStreamingService(),
+      savedRecordingFileService: _FakeSavedRecordingFileService(),
+      batchPollInterval: const Duration(days: 1),
+      batchRefreshCooldown: const Duration(seconds: 10),
+    );
+    addTearDown(controller.dispose);
+
+    controller.selectRoom(room);
+
+    expect(controller.canRefreshBatchStatus, isTrue);
+    await controller.refreshBatchStatus();
+    expect(api.batchStatusRequestCount, 1);
+    expect(controller.canRefreshBatchStatus, isFalse);
+    expect(controller.batchRefreshButtonLabel, startsWith('상태 새로고침 ('));
+
+    await controller.refreshBatchStatus();
+    expect(api.batchStatusRequestCount, 1);
+  });
 }
 
 Future<void> _waitFor(Future<bool> Function() condition) async {
@@ -327,6 +366,34 @@ class _RecoveringBatchMeetingApi extends _FakeBatchMeetingApi {
       'job_id': 'job-batch',
       'job_status': 'running',
       'job_batch_status_code': 3,
+    };
+  }
+}
+
+class _CountingBatchStatusApi extends MeetingApi {
+  int batchStatusRequestCount = 0;
+
+  @override
+  Future<Map<String, dynamic>> getBatchStatus(String backendMeetingId) async {
+    batchStatusRequestCount += 1;
+    return {
+      'meeting_id': backendMeetingId,
+      'status': 'transcribing',
+      'batch_status_code': 3,
+      'synced': false,
+      'job_id': 'job-batch',
+      'job_status': 'running',
+      'job_batch_status_code': 3,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> getMeeting(String backendMeetingId) async {
+    return {
+      'id': backendMeetingId,
+      'status': 'transcribing',
+      'audio_s3_key': 'audio/$backendMeetingId/original.m4a',
+      'transcript_s3_key': 'transcript/$backendMeetingId/transcript.txt',
     };
   }
 }
