@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/errors/app_exception.dart';
@@ -12,6 +14,8 @@ typedef AskQaQuestion =
       String backendMeetingId, {
       required String question,
     });
+typedef LoadSuggestedQuestions =
+    Future<List<String>> Function(String backendMeetingId);
 
 class MeetingChatFab extends StatelessWidget {
   const MeetingChatFab({
@@ -67,11 +71,13 @@ class MeetingChatSheet extends StatefulWidget {
     required this.room,
     required this.onLoadHistory,
     required this.onAskQuestion,
+    required this.onLoadSuggestedQuestions,
   });
 
   final MeetingRoom room;
   final LoadQaHistory onLoadHistory;
   final AskQaQuestion onAskQuestion;
+  final LoadSuggestedQuestions onLoadSuggestedQuestions;
 
   @override
   State<MeetingChatSheet> createState() => _MeetingChatSheetState();
@@ -81,8 +87,10 @@ class _MeetingChatSheetState extends State<MeetingChatSheet> {
   late final TextEditingController _inputController;
   late final ScrollController _scrollController;
   late final List<QaMessage> _messages;
+  List<String> _suggestedQuestions = const [];
   bool _isThinking = false;
   bool _isLoadingHistory = true;
+  bool _isLoadingSuggestions = false;
 
   @override
   void initState() {
@@ -97,6 +105,7 @@ class _MeetingChatSheetState extends State<MeetingChatSheet> {
         QaMessage.localAssistant('요약: ${widget.room.summary!}'),
     ];
     _loadHistory();
+    _loadSuggestedQuestions();
   }
 
   @override
@@ -150,6 +159,13 @@ class _MeetingChatSheetState extends State<MeetingChatSheet> {
                     ],
                   ),
                 ),
+                if (_isLoadingSuggestions || _suggestedQuestions.isNotEmpty)
+                  _SuggestedQuestionsBar(
+                    questions: _suggestedQuestions,
+                    isLoading: _isLoadingSuggestions,
+                    isBusy: _isThinking,
+                    onSelected: _sendSuggestedQuestion,
+                  ),
                 _ChatComposer(
                   controller: _inputController,
                   onSend: _sendMessage,
@@ -193,6 +209,26 @@ class _MeetingChatSheetState extends State<MeetingChatSheet> {
     }
   }
 
+  Future<void> _loadSuggestedQuestions() async {
+    final backendId = widget.room.backendId;
+    if (backendId == null || backendId.isEmpty) return;
+    setState(() => _isLoadingSuggestions = true);
+    try {
+      final questions = await widget.onLoadSuggestedQuestions(backendId);
+      if (!mounted) return;
+      setState(() {
+        _suggestedQuestions = questions.take(3).toList(growable: false);
+        _isLoadingSuggestions = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _suggestedQuestions = const [];
+        _isLoadingSuggestions = false;
+      });
+    }
+  }
+
   Future<void> _sendMessage() async {
     final text = _inputController.text.trim();
     if (text.isEmpty || _isThinking) return;
@@ -216,6 +252,7 @@ class _MeetingChatSheetState extends State<MeetingChatSheet> {
         _messages.add(answer);
         _isThinking = false;
       });
+      unawaited(_loadSuggestedQuestions());
       _scrollToBottom();
     } catch (error) {
       if (!mounted) return;
@@ -225,6 +262,12 @@ class _MeetingChatSheetState extends State<MeetingChatSheet> {
       });
       _scrollToBottom();
     }
+  }
+
+  Future<void> _sendSuggestedQuestion(String question) async {
+    if (_isThinking) return;
+    _inputController.text = question;
+    await _sendMessage();
   }
 
   String _errorText(Object error) {
@@ -400,6 +443,91 @@ class _ChatComposer extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SuggestedQuestionsBar extends StatelessWidget {
+  const _SuggestedQuestionsBar({
+    required this.questions,
+    required this.isLoading,
+    required this.isBusy,
+    required this.onSelected,
+  });
+
+  final List<String> questions;
+  final bool isLoading;
+  final bool isBusy;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppTheme.border)),
+      ),
+      child: SizedBox(
+        height: 36,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: isLoading && questions.isEmpty ? 1 : questions.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            if (isLoading && questions.isEmpty) {
+              return const _SuggestedQuestionLoadingChip();
+            }
+            final question = questions[index];
+            return ActionChip(
+              visualDensity: VisualDensity.compact,
+              side: const BorderSide(color: AppTheme.border),
+              backgroundColor: const Color(0xFFF7F8FA),
+              disabledColor: const Color(0xFFF1F3F7),
+              label: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 168),
+                child: Text(
+                  question,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              onPressed: isBusy ? null : () => onSelected(question),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _SuggestedQuestionLoadingChip extends StatelessWidget {
+  const _SuggestedQuestionLoadingChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F8FA),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Text(
+          '예상 질문 생성 중',
+          style: TextStyle(
+            color: AppTheme.muted,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );

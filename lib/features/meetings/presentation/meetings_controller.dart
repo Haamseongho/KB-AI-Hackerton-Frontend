@@ -521,6 +521,10 @@ class MeetingsController extends ChangeNotifier {
     return _api.askQaQuestion(backendMeetingId, question: question);
   }
 
+  Future<List<String>> getQaSuggestedQuestions(String backendMeetingId) {
+    return _api.getQaSuggestedQuestions(backendMeetingId);
+  }
+
   void _scheduleBatchPoll(String localId, {bool immediate = false}) {
     _batchPollTimers.remove(localId)?.cancel();
     if (immediate) {

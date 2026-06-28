@@ -66,6 +66,18 @@ class MeetingApi {
     return QaMessage.fromAnswerJson(payload);
   }
 
+  Future<List<String>> getQaSuggestedQuestions(String backendMeetingId) async {
+    final payload = await _client.getJson(
+      '/meetings/$backendMeetingId/qa/suggested-questions',
+    );
+    final questions = payload['questions'];
+    if (questions is! List) return const [];
+    return questions
+        .map((question) => question.toString().trim())
+        .where((question) => question.isNotEmpty)
+        .toList(growable: false);
+  }
+
   Future<Map<String, dynamic>> getJob(String jobId) {
     return _client.getJson('/jobs/$jobId');
   }

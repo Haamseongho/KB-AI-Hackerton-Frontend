@@ -415,6 +415,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
         room: room,
         onLoadHistory: _controller.getQaHistory,
         onAskQuestion: _controller.askQaQuestion,
+        onLoadSuggestedQuestions: _controller.getQaSuggestedQuestions,
       ),
     );
   }
