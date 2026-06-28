@@ -111,6 +111,70 @@ void main() {
     );
     expect(BatchTranscriptionStatus.fromCode(99), isNull);
   });
+
+  test(
+    'clears transient batch polling error after successful status refresh',
+    () async {
+      final tempDirectory = await Directory.systemTemp.createTemp(
+        'voice-doc-batch-recover-test',
+      );
+      addTearDown(() => tempDirectory.delete(recursive: true));
+      final audioFile = File('${tempDirectory.path}/meeting.m4a');
+      await audioFile.writeAsBytes(List<int>.filled(32, 1));
+
+      final now = DateTime(2026, 6, 28);
+      final room = MeetingRoom(
+        localId: 'local-batch-recover',
+        meetingId: 'MTG-20260628-010',
+        backendId: 'backend-batch-recover',
+        title: '배치 복구 테스트',
+        meetingType: MeetingType.small,
+        status: MeetingStatus.ready,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final repository = InMemoryMeetingRepository(rooms: [room]);
+      final api = _RecoveringBatchMeetingApi();
+      final controller = MeetingsController(
+        repository: repository,
+        api: api,
+        transcriptionSocketClient: _FakeTranscriptionSocketClient(),
+        audioStreamingService: _FakeRealtimeAudioStreamingService(),
+        savedRecordingFileService: _FakeSavedRecordingFileService(),
+        audioFilePickerService: _FakeAudioFilePickerService(
+          RecordingAsset(
+            fileName: 'meeting.m4a',
+            filePath: audioFile.path,
+            contentType: 'audio/mp4',
+            durationMs: 0,
+            realtimeAudioEncoding: 'batch_file',
+            realtimeSampleRate: 0,
+            realtimeChannels: 0,
+          ),
+        ),
+        batchPollInterval: const Duration(days: 1),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.loadRooms();
+      controller.selectRoom(room);
+      await controller.startBatchTranscription(useSavedRecording: false);
+      await _waitFor(
+        () async =>
+            (await repository.getRoom(room.localId))?.batchErrorMessage != null,
+      );
+
+      var saved = await repository.getRoom(room.localId);
+      expect(saved?.batchErrorMessage, '요청에 실패했습니다. 서버와 네트워크 상태를 확인해 주세요.');
+
+      await controller.refreshBatchStatus();
+
+      saved = await repository.getRoom(room.localId);
+      expect(saved?.status, MeetingStatus.transcribing);
+      expect(saved?.batchStatus, BatchTranscriptionStatus.transcribing);
+      expect(saved?.batchErrorMessage, isNull);
+    },
+  );
 }
 
 Future<void> _waitFor(Future<bool> Function() condition) async {
@@ -242,6 +306,27 @@ class _FakeBatchMeetingApi extends MeetingApi {
           'due_date_resolved': '2026-06-19',
         },
       ],
+    };
+  }
+}
+
+class _RecoveringBatchMeetingApi extends _FakeBatchMeetingApi {
+  int batchStatusRequestCount = 0;
+
+  @override
+  Future<Map<String, dynamic>> getBatchStatus(String backendMeetingId) async {
+    batchStatusRequestCount += 1;
+    if (batchStatusRequestCount == 1) {
+      throw Exception('일시적인 네트워크 오류');
+    }
+    return {
+      'meeting_id': backendMeetingId,
+      'status': 'transcribing',
+      'batch_status_code': 3,
+      'synced': false,
+      'job_id': 'job-batch',
+      'job_status': 'running',
+      'job_batch_status_code': 3,
     };
   }
 }

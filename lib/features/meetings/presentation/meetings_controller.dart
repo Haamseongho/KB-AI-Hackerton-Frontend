@@ -617,6 +617,7 @@ class MeetingsController extends ChangeNotifier {
           batchStatus: batchStatus,
           recording: polledRecording,
           updatedAt: DateTime.now(),
+          clearBatchError: true,
         ),
         _messageFor(meetingStatus),
       );
