@@ -162,6 +162,7 @@ class MeetingCard extends StatelessWidget {
       MeetingStatus.uploading,
       MeetingStatus.uploaded,
       MeetingStatus.queued,
+      MeetingStatus.savingRecording,
       MeetingStatus.transcribing,
       MeetingStatus.summarizing,
     }.contains(status);

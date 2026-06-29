@@ -10,11 +10,13 @@ import 'package:kb_ai_hackerton_frontend/features/meetings/data/meeting_api.dart
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_room.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_status.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/meeting_type.dart';
+import 'package:kb_ai_hackerton_frontend/features/meetings/domain/recording_asset.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/transcript_segment.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/domain/transcription_event.dart';
 import 'package:kb_ai_hackerton_frontend/features/meetings/presentation/meetings_controller.dart';
 import 'package:kb_ai_hackerton_frontend/features/recordings/data/realtime_audio_streaming_service.dart';
 import 'package:kb_ai_hackerton_frontend/features/recordings/data/saved_recording_file_service.dart';
+import 'package:kb_ai_hackerton_frontend/features/transcription/data/transcript_file_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -90,6 +92,61 @@ void main() {
       expect(controller.isRecordingAnotherRoom(secondRoom.localId), isTrue);
     },
   );
+
+  test(
+    'leave marks the room as saving before background persistence finishes',
+    () async {
+      final now = DateTime(2026, 6, 19);
+      final room = MeetingRoom(
+        localId: 'local-saving',
+        meetingId: 'MTG-20260619-001',
+        backendId: 'backend-saving',
+        title: '저장 중 회의',
+        meetingType: MeetingType.small,
+        status: MeetingStatus.recording,
+        createdAt: now,
+        updatedAt: now,
+        segments: const [
+          TranscriptSegment(
+            id: 'segment-saving',
+            text: '저장 중에도 다시 들어오면 보이는 문장',
+            startedAt: Duration(seconds: 1),
+            endedAt: Duration(seconds: 2),
+            isFinal: true,
+          ),
+        ],
+      );
+      final repository = InMemoryMeetingRepository(rooms: [room]);
+      final savedRecordingService = _BlockingSavedRecordingFileService();
+      final controller = MeetingsController(
+        repository: repository,
+        api: MeetingApi(),
+        transcriptionSocketClient: _FakeTranscriptionSocketClient(),
+        audioStreamingService: _FakeRealtimeAudioStreamingService(),
+        savedRecordingFileService: savedRecordingService,
+        transcriptFileService: _FakeTranscriptFileService(),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.loadRooms();
+      controller.selectRoom(room);
+
+      final leaveFuture = controller.leaveRoom();
+      await Future<void>.delayed(Duration.zero);
+
+      var saved = await repository.getRoom(room.localId);
+      expect(saved?.status, MeetingStatus.savingRecording);
+      expect(controller.selectedRoom?.status, MeetingStatus.savingRecording);
+
+      savedRecordingService.complete();
+      await leaveFuture;
+
+      saved = await repository.getRoom(room.localId);
+      expect(saved?.status, MeetingStatus.transcriptionCompleted);
+      expect(saved?.transcriptFilePath, '/tmp/MTG-20260619-001_transcript.txt');
+      expect(saved?.recording?.fileName, 'saved.m4a');
+    },
+  );
 }
 
 class _GrantedMicrophonePermissionService extends MicrophonePermissionService {
@@ -162,4 +219,45 @@ class _FakeSavedRecordingFileService extends SavedRecordingFileService {
 
   @override
   Future<void> dispose() async {}
+}
+
+class _BlockingSavedRecordingFileService extends SavedRecordingFileService {
+  final Completer<void> _stopCompleter = Completer<void>();
+
+  void complete() {
+    if (!_stopCompleter.isCompleted) {
+      _stopCompleter.complete();
+    }
+  }
+
+  @override
+  Future<RecordingAsset?> stop({
+    required String meetingId,
+    required String title,
+  }) async {
+    await _stopCompleter.future;
+    return RecordingAsset(
+      fileName: 'saved.m4a',
+      filePath: '/tmp/saved.m4a',
+      contentType: 'audio/mp4',
+      durationMs: 1000,
+      realtimeAudioEncoding: 'pcm',
+      realtimeSampleRate: 16000,
+      realtimeChannels: 1,
+    );
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
+class _FakeTranscriptFileService extends TranscriptFileService {
+  @override
+  Future<String?> saveTranscript({
+    required String meetingId,
+    required String title,
+    required List<TranscriptSegment> segments,
+  }) async {
+    return '/tmp/${meetingId}_transcript.txt';
+  }
 }

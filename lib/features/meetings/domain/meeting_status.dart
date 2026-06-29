@@ -9,6 +9,7 @@ enum MeetingStatus {
   orchestrationStarted('orchestration_started', '진행 중'),
   recording('recording', '녹음 중'),
   paused('paused', '일시정지'),
+  savingRecording('saving_recording', '저장 중'),
   transcribing('transcribing', '변환 중'),
   transcriptionCompleted('transcription_completed', '변환 완료'),
   summaryQueued('summary_queued', '요약 대기'),

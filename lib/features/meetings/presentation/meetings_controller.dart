@@ -793,6 +793,7 @@ class MeetingsController extends ChangeNotifier {
   Future<void> leaveRoom() async {
     final room = selectedRoom;
     if (room == null) return;
+    if (room.status == MeetingStatus.savingRecording) return;
     if (_activeRecordingLocalId != null &&
         _activeRecordingLocalId != room.localId) {
       errorMessage = '${activeRecordingRoomTitle ?? '다른 회의방'}에서 녹음이 진행 중입니다.';
@@ -800,20 +801,33 @@ class MeetingsController extends ChangeNotifier {
       return;
     }
 
-    await _stopRealtimeStream(controlType: 'stop');
-    final recordingAsset = await _stopSavedRecording(room);
-
-    final transcriptFilePath = await _transcriptFileService.saveTranscript(
-      meetingId: room.meetingId,
-      title: room.title,
-      segments: room.segments,
+    await _saveAndSelect(
+      room.copyWith(
+        status: MeetingStatus.savingRecording,
+        updatedAt: DateTime.now(),
+      ),
+      '녹음 파일과 대화록을 백그라운드에서 저장하고 있습니다.',
     );
 
-    final updated = room.copyWith(
-      status: room.segments.isEmpty
+    await _stopRealtimeStream(controlType: 'stop');
+    await _transcriptionEventQueue;
+    final latestRoom = await _repository.getRoom(room.localId) ?? room;
+    final recordingAsset = await _stopSavedRecording(latestRoom);
+
+    final transcriptFilePath = await _transcriptFileService.saveTranscript(
+      meetingId: latestRoom.meetingId,
+      title: latestRoom.title,
+      segments: latestRoom.segments,
+    );
+
+    final updated = latestRoom.copyWith(
+      status: latestRoom.segments.isEmpty
           ? MeetingStatus.ready
           : MeetingStatus.transcriptionCompleted,
-      recording: recordingAsset ?? room.recording ?? _recordingAssetFor(room),
+      recording:
+          recordingAsset ??
+          latestRoom.recording ??
+          _recordingAssetFor(latestRoom),
       transcriptFilePath: transcriptFilePath,
       updatedAt: DateTime.now(),
       clearPartialTranscript: true,
@@ -1320,6 +1334,7 @@ class MeetingsController extends ChangeNotifier {
   bool _isActive(MeetingStatus status) {
     return status == MeetingStatus.recording ||
         status == MeetingStatus.paused ||
+        status == MeetingStatus.savingRecording ||
         status == MeetingStatus.transcribing;
   }
 
@@ -1383,6 +1398,7 @@ class MeetingsController extends ChangeNotifier {
       MeetingStatus.orchestrationStarted => '워크플로가 시작되었습니다.',
       MeetingStatus.recording => '백엔드 상태: 변환 중',
       MeetingStatus.paused => '실시간 변환이 일시정지되었습니다.',
+      MeetingStatus.savingRecording => '녹음 파일과 대화록을 저장하고 있습니다.',
       MeetingStatus.transcribing => '백엔드 상태: 변환 중',
       MeetingStatus.transcriptionCompleted => '대화록 변환이 완료되었습니다.',
       MeetingStatus.summaryQueued => '요약 작업이 대기 중입니다.',

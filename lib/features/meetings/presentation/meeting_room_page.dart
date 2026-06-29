@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -49,6 +51,7 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
     final realtime = room.workflow == MeetingWorkflow.realtime;
     final isRecording = room.status == MeetingStatus.recording;
     final isPaused = room.status == MeetingStatus.paused;
+    final isSavingRecording = room.status == MeetingStatus.savingRecording;
     final anotherRoomRecording = _controller.isRecordingAnotherRoom(
       room.localId,
     );
@@ -77,6 +80,10 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
                     '${_controller.activeRecordingRoomTitle ?? '다른 회의실'}에서 '
                     '녹음이 진행 중입니다.',
               ),
+              const SizedBox(height: 12),
+            ],
+            if (isSavingRecording) ...[
+              const _Notice(text: '녹음 파일과 대화록을 백그라운드에서 저장하고 있습니다.'),
               const SizedBox(height: 12),
             ],
             if (realtime) ...[
@@ -157,11 +164,13 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
           ? _RealtimeControls(
               isRecording: isRecording,
               isPaused: isPaused,
-              onRecord: anotherRoomRecording
+              onRecord: anotherRoomRecording || isSavingRecording
                   ? null
                   : _controller.startRecording,
               onPause: isRecording ? _controller.pauseRecording : null,
-              onLeave: _showLeaveDialog,
+              onLeave: anotherRoomRecording || isSavingRecording
+                  ? null
+                  : _showLeaveDialog,
             )
           : null,
       floatingActionButton: MeetingChatFab(
@@ -224,7 +233,8 @@ class _MeetingRoomPageState extends State<MeetingRoomPage> {
           FilledButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
-              _controller.leaveRoom();
+              unawaited(_controller.leaveRoom());
+              Navigator.of(context).pop();
             },
             child: const Text('저장'),
           ),
@@ -688,7 +698,7 @@ class _RealtimeControls extends StatelessWidget {
   final bool isPaused;
   final VoidCallback? onRecord;
   final VoidCallback? onPause;
-  final VoidCallback onLeave;
+  final VoidCallback? onLeave;
 
   @override
   Widget build(BuildContext context) {
