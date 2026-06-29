@@ -52,6 +52,7 @@ class QaMessage {
     this.groundingRatio,
     this.droppedEvidenceCount,
     this.evidence = const [],
+    this.mindmapUrl,
   });
 
   final String id;
@@ -66,9 +67,12 @@ class QaMessage {
   final double? groundingRatio;
   final int? droppedEvidenceCount;
   final List<QaEvidence> evidence;
+  final String? mindmapUrl;
 
   bool get isUser => role == QaMessageRole.user;
   bool get isRejected => role == QaMessageRole.assistant && answerable == false;
+  bool get isMindmap => displayType == 'mindmap';
+  bool get hasMindmapImage => (mindmapUrl ?? '').trim().isNotEmpty;
 
   factory QaMessage.localUser(String content) {
     final now = DateTime.now();
@@ -109,6 +113,7 @@ class QaMessage {
       groundingRatio: _doubleOrNull(json['grounding_ratio']),
       droppedEvidenceCount: _intOrNull(json['dropped_evidence_count']),
       evidence: _evidenceList(json['evidence']),
+      mindmapUrl: json['mindmap_url']?.toString(),
     );
   }
 
@@ -125,6 +130,7 @@ class QaMessage {
       confidence: json['confidence']?.toString(),
       groundingRatio: _doubleOrNull(json['grounding_ratio']),
       evidence: _evidenceList(json['evidence']),
+      mindmapUrl: json['mindmap_url']?.toString(),
     );
   }
 

@@ -601,7 +601,160 @@ class _ChatBubbleState extends State<_ChatBubble> {
                   _EvidenceList(evidence: message.evidence),
                 ],
               ],
+              if (!isUser && message.hasMindmapImage) ...[
+                const SizedBox(height: 10),
+                _MindmapPreview(imageUrl: message.mindmapUrl!),
+              ] else if (!isUser && message.isMindmap) ...[
+                const SizedBox(height: 9),
+                const _MindmapUnavailable(),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MindmapPreview extends StatelessWidget {
+  const _MindmapPreview({required this.imageUrl});
+
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => _showMindmapDialog(context),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF7F8FA),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: AspectRatio(
+            aspectRatio: 1.45,
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return const Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return const _MindmapImageError();
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showMindmapDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog.fullscreen(
+        backgroundColor: const Color(0xFFF7F8FA),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                child: Row(
+                  children: [
+                    Text(
+                      '마인드맵',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      tooltip: '닫기',
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4,
+                  child: Center(
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const CircularProgressIndicator();
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return const _MindmapImageError();
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MindmapImageError extends StatelessWidget {
+  const _MindmapImageError();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(14),
+        child: Text(
+          '마인드맵 이미지를 불러올 수 없습니다.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppTheme.muted,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MindmapUnavailable extends StatelessWidget {
+  const _MindmapUnavailable();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F8FA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(10),
+        child: Text(
+          '마인드맵 이미지 링크가 만료되었거나 준비되지 않았습니다. 다시 요청해 주세요.',
+          style: TextStyle(
+            color: AppTheme.muted,
+            fontSize: 12,
+            height: 1.35,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
