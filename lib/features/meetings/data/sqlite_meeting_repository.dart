@@ -1,0 +1,490 @@
+import 'dart:convert';
+
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
+
+import '../domain/action_item.dart';
+import '../domain/batch_transcription_status.dart';
+import '../domain/meeting_repository.dart';
+import '../domain/meeting_room.dart';
+import '../domain/meeting_status.dart';
+import '../domain/meeting_type.dart';
+import '../domain/meeting_workflow.dart';
+import '../domain/recording_asset.dart';
+import '../domain/realtime_minutes_progress.dart';
+import '../domain/transcript_segment.dart';
+
+/// 앱 재시작 후에도 회의방, transcript, recording metadata를 유지하는 SQLite 저장소입니다.
+///
+/// 데모 흐름에서 필요한 데이터를 우선 보존합니다. 실제 오디오 파일과 transcript txt는
+/// 파일 시스템에 저장하고, 이 저장소에는 파일 경로와 검색 가능한 metadata를 남깁니다.
+class SqliteMeetingRepository implements MeetingRepository {
+  SqliteMeetingRepository({Database? database}) : _database = database;
+
+  static const _databaseName = 'voice_doc_flutter.db';
+  static const _databaseVersion = 9;
+
+  Database? _database;
+
+  Future<Database> get _db async {
+    final existing = _database;
+    if (existing != null) return existing;
+
+    final path = p.join(await getDatabasesPath(), _databaseName);
+    final db = await openDatabase(
+      path,
+      version: _databaseVersion,
+      onCreate: _createSchema,
+      onUpgrade: _upgradeSchema,
+    );
+    _database = db;
+    return db;
+  }
+
+  @override
+  Future<List<MeetingRoom>> listRooms({String query = ''}) async {
+    final db = await _db;
+    final normalized = query.trim().toLowerCase();
+    final rows = await db.query('meetings', orderBy: 'updated_at DESC');
+    final rooms = <MeetingRoom>[];
+
+    for (final row in rows) {
+      final room = await _roomFromRow(db, row);
+      if (normalized.isEmpty ||
+          room.title.toLowerCase().contains(normalized) ||
+          room.meetingId.toLowerCase().contains(normalized) ||
+          _dateText(room.createdAt).contains(normalized) ||
+          room.status.value.toLowerCase().contains(normalized)) {
+        rooms.add(room);
+      }
+    }
+
+    return List.unmodifiable(rooms);
+  }
+
+  @override
+  Future<MeetingRoom?> getRoom(String localId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'meetings',
+      where: 'local_id = ?',
+      whereArgs: [localId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _roomFromRow(db, rows.single);
+  }
+
+  @override
+  Future<MeetingRoom> saveRoom(MeetingRoom room) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      await txn.insert(
+        'meetings',
+        _meetingRow(room),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      await txn.delete(
+        'transcript_segments',
+        where: 'local_id = ?',
+        whereArgs: [room.localId],
+      );
+      for (var index = 0; index < room.segments.length; index += 1) {
+        await txn.insert(
+          'transcript_segments',
+          _segmentRow(room.localId, room.segments[index], index),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+    return room;
+  }
+
+  @override
+  Future<void> deleteRoom(String localId) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'transcript_segments',
+        where: 'local_id = ?',
+        whereArgs: [localId],
+      );
+      await txn.delete('meetings', where: 'local_id = ?', whereArgs: [localId]);
+    });
+  }
+
+  Future<void> close() async {
+    await _database?.close();
+    _database = null;
+  }
+
+  Future<void> _createSchema(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE meetings (
+        local_id TEXT PRIMARY KEY,
+        meeting_id TEXT NOT NULL,
+        backend_id TEXT,
+        title TEXT NOT NULL,
+        meeting_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        workflow TEXT NOT NULL DEFAULT 'realtime',
+        notes TEXT,
+        summary TEXT,
+        partial_transcript TEXT,
+        auto_scroll INTEGER NOT NULL,
+        stream_session_id TEXT,
+        stream_segment_count INTEGER NOT NULL,
+        transcript_file_path TEXT,
+        preprocessed_transcript_s3_key TEXT,
+        minutes_json_s3_key TEXT,
+        minutes_markdown_s3_key TEXT,
+        pdf_s3_key TEXT,
+        docx_s3_key TEXT,
+        uploaded_at TEXT,
+        recording_file_name TEXT,
+        recording_file_path TEXT,
+        recording_content_type TEXT,
+        recording_duration_ms INTEGER,
+        realtime_audio_encoding TEXT,
+        realtime_sample_rate INTEGER,
+        realtime_channels INTEGER,
+        audio_s3_key TEXT,
+        transcript_s3_key TEXT,
+        recording_file_size_bytes INTEGER,
+        batch_job_id TEXT,
+        batch_status_code INTEGER,
+        batch_error_message TEXT,
+        realtime_status_code INTEGER,
+        realtime_progress_percent INTEGER,
+        realtime_progress_step TEXT,
+        realtime_progress_message TEXT,
+        realtime_progress_updated_at TEXT,
+        realtime_progress_completed INTEGER NOT NULL DEFAULT 0,
+        realtime_progress_failed INTEGER NOT NULL DEFAULT 0,
+        decisions_json TEXT,
+        open_issues_json TEXT,
+        action_items_json TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE transcript_segments (
+        id TEXT NOT NULL,
+        local_id TEXT NOT NULL,
+        segment_index INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        speaker TEXT,
+        started_at_ms INTEGER NOT NULL,
+        ended_at_ms INTEGER NOT NULL,
+        confidence_score REAL,
+        is_low_confidence INTEGER NOT NULL DEFAULT 0,
+        is_final INTEGER NOT NULL,
+        PRIMARY KEY (local_id, id),
+        FOREIGN KEY (local_id) REFERENCES meetings(local_id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX idx_meetings_search ON meetings(title, meeting_id, status, created_at)',
+    );
+  }
+
+  /// 기존 설치 기기의 DB에도 최신 backend transcript metadata 컬럼을 추가합니다.
+  Future<void> _upgradeSchema(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE transcript_segments ADD COLUMN confidence_score REAL',
+      );
+      await db.execute(
+        'ALTER TABLE transcript_segments ADD COLUMN is_low_confidence INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (oldVersion < 3) {
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN recording_file_size_bytes INTEGER',
+      );
+      await db.execute('ALTER TABLE meetings ADD COLUMN batch_job_id TEXT');
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN batch_error_message TEXT',
+      );
+    }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE meetings ADD COLUMN decisions_json TEXT');
+      await db.execute('ALTER TABLE meetings ADD COLUMN open_issues_json TEXT');
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN action_items_json TEXT',
+      );
+    }
+    if (oldVersion < 5) {
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN batch_status_code INTEGER',
+      );
+    }
+    if (oldVersion < 6) {
+      await db.execute(
+        "ALTER TABLE meetings ADD COLUMN workflow TEXT NOT NULL DEFAULT 'realtime'",
+      );
+    }
+    if (oldVersion < 7) {
+      await db.execute('ALTER TABLE meetings ADD COLUMN docx_s3_key TEXT');
+    }
+    if (oldVersion < 8) {
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_status_code INTEGER',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_percent INTEGER',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_step TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_message TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_updated_at TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_completed INTEGER NOT NULL DEFAULT 0',
+      );
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN realtime_progress_failed INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (oldVersion < 9) {
+      await db.execute(
+        'ALTER TABLE meetings ADD COLUMN preprocessed_transcript_s3_key TEXT',
+      );
+    }
+  }
+
+  Map<String, Object?> _meetingRow(MeetingRoom room) {
+    final recording = room.recording;
+    return {
+      'local_id': room.localId,
+      'meeting_id': room.meetingId,
+      'backend_id': room.backendId,
+      'title': room.title,
+      'meeting_type': room.meetingType.value,
+      'status': room.status.value,
+      'created_at': room.createdAt.toIso8601String(),
+      'updated_at': room.updatedAt.toIso8601String(),
+      'workflow': room.workflow.value,
+      'notes': room.notes,
+      'summary': room.summary,
+      'partial_transcript': room.partialTranscript,
+      'auto_scroll': room.autoScroll ? 1 : 0,
+      'stream_session_id': room.streamSessionId,
+      'stream_segment_count': room.streamSegmentCount,
+      'transcript_file_path': room.transcriptFilePath,
+      'preprocessed_transcript_s3_key': room.preprocessedTranscriptS3Key,
+      'minutes_json_s3_key': room.minutesJsonS3Key,
+      'minutes_markdown_s3_key': room.minutesMarkdownS3Key,
+      'pdf_s3_key': room.pdfS3Key,
+      'docx_s3_key': room.docxS3Key,
+      'uploaded_at': room.uploadedAt?.toIso8601String(),
+      'recording_file_name': recording?.fileName,
+      'recording_file_path': recording?.filePath,
+      'recording_content_type': recording?.contentType,
+      'recording_duration_ms': recording?.durationMs,
+      'realtime_audio_encoding': recording?.realtimeAudioEncoding,
+      'realtime_sample_rate': recording?.realtimeSampleRate,
+      'realtime_channels': recording?.realtimeChannels,
+      'audio_s3_key': recording?.audioS3Key,
+      'transcript_s3_key': recording?.transcriptS3Key,
+      'recording_file_size_bytes': recording?.fileSizeBytes,
+      'batch_job_id': room.batchJobId,
+      'batch_status_code': room.batchStatus?.code,
+      'batch_error_message': room.batchErrorMessage,
+      'realtime_status_code': room.realtimeMinutesProgress?.statusCode,
+      'realtime_progress_percent': room.realtimeMinutesProgress?.percent,
+      'realtime_progress_step': room.realtimeMinutesProgress?.step,
+      'realtime_progress_message': room.realtimeMinutesProgress?.message,
+      'realtime_progress_updated_at': room.realtimeMinutesProgress?.updatedAt
+          ?.toIso8601String(),
+      'realtime_progress_completed':
+          room.realtimeMinutesProgress?.completed == true ? 1 : 0,
+      'realtime_progress_failed': room.realtimeMinutesProgress?.failed == true
+          ? 1
+          : 0,
+      'decisions_json': jsonEncode(room.decisions),
+      'open_issues_json': jsonEncode(room.openIssues),
+      'action_items_json': jsonEncode(
+        room.actionItems.map((item) => item.toJson()).toList(growable: false),
+      ),
+    };
+  }
+
+  Map<String, Object?> _segmentRow(
+    String localId,
+    TranscriptSegment segment,
+    int index,
+  ) {
+    return {
+      'id': segment.id,
+      'local_id': localId,
+      'segment_index': index,
+      'text': segment.text,
+      'speaker': segment.speaker,
+      'started_at_ms': segment.startedAt.inMilliseconds,
+      'ended_at_ms': segment.endedAt.inMilliseconds,
+      'confidence_score': segment.confidenceScore,
+      'is_low_confidence': segment.isLowConfidence ? 1 : 0,
+      'is_final': segment.isFinal ? 1 : 0,
+    };
+  }
+
+  Future<MeetingRoom> _roomFromRow(
+    Database db,
+    Map<String, Object?> row,
+  ) async {
+    final localId = row['local_id']! as String;
+    final segmentRows = await db.query(
+      'transcript_segments',
+      where: 'local_id = ?',
+      whereArgs: [localId],
+      orderBy: 'segment_index ASC',
+    );
+
+    return MeetingRoom(
+      localId: localId,
+      meetingId: row['meeting_id']! as String,
+      backendId: row['backend_id'] as String?,
+      title: row['title']! as String,
+      meetingType: _meetingTypeFromValue(row['meeting_type'] as String?),
+      status: MeetingStatus.fromJson(row['status'] as String?),
+      createdAt: DateTime.parse(row['created_at']! as String),
+      updatedAt: DateTime.parse(row['updated_at']! as String),
+      workflow: MeetingWorkflow.fromJson(row['workflow'] as String?),
+      notes: row['notes'] as String?,
+      recording: _recordingFromRow(row),
+      summary: row['summary'] as String?,
+      segments: segmentRows.map(_segmentFromRow).toList(growable: false),
+      partialTranscript: row['partial_transcript'] as String?,
+      autoScroll: (row['auto_scroll'] as int? ?? 1) == 1,
+      streamSessionId: row['stream_session_id'] as String?,
+      streamSegmentCount: row['stream_segment_count'] as int? ?? 0,
+      transcriptFilePath: row['transcript_file_path'] as String?,
+      preprocessedTranscriptS3Key:
+          row['preprocessed_transcript_s3_key'] as String?,
+      minutesJsonS3Key: row['minutes_json_s3_key'] as String?,
+      minutesMarkdownS3Key: row['minutes_markdown_s3_key'] as String?,
+      pdfS3Key: row['pdf_s3_key'] as String?,
+      docxS3Key: row['docx_s3_key'] as String?,
+      uploadedAt: _dateTimeOrNull(row['uploaded_at'] as String?),
+      batchJobId: row['batch_job_id'] as String?,
+      batchStatus: BatchTranscriptionStatus.fromCode(row['batch_status_code']),
+      batchErrorMessage: row['batch_error_message'] as String?,
+      realtimeMinutesProgress: _realtimeProgressFromRow(row),
+      decisions: _stringListFromJson(row['decisions_json'] as String?),
+      openIssues: _stringListFromJson(row['open_issues_json'] as String?),
+      actionItems: _actionItemsFromJson(row['action_items_json'] as String?),
+    );
+  }
+
+  RecordingAsset? _recordingFromRow(Map<String, Object?> row) {
+    final fileName = row['recording_file_name'] as String?;
+    final filePath = row['recording_file_path'] as String?;
+    final contentType = row['recording_content_type'] as String?;
+    if (fileName == null || filePath == null || contentType == null) {
+      return null;
+    }
+
+    return RecordingAsset(
+      fileName: fileName,
+      filePath: filePath,
+      contentType: contentType,
+      durationMs: row['recording_duration_ms'] as int? ?? 0,
+      realtimeAudioEncoding: row['realtime_audio_encoding'] as String? ?? 'pcm',
+      realtimeSampleRate: row['realtime_sample_rate'] as int? ?? 16000,
+      realtimeChannels: row['realtime_channels'] as int? ?? 1,
+      audioS3Key: row['audio_s3_key'] as String?,
+      transcriptS3Key: row['transcript_s3_key'] as String?,
+      fileSizeBytes: row['recording_file_size_bytes'] as int?,
+    );
+  }
+
+  RealtimeMinutesProgress? _realtimeProgressFromRow(Map<String, Object?> row) {
+    final progress = RealtimeMinutesProgress(
+      statusCode: row['realtime_status_code'] as int?,
+      percent: row['realtime_progress_percent'] as int?,
+      step: row['realtime_progress_step'] as String?,
+      message: row['realtime_progress_message'] as String?,
+      updatedAt: _dateTimeOrNull(
+        row['realtime_progress_updated_at'] as String?,
+      ),
+      completed: (row['realtime_progress_completed'] as int? ?? 0) == 1,
+      failed: (row['realtime_progress_failed'] as int? ?? 0) == 1,
+    );
+    return progress.isVisible || progress.statusCode != null ? progress : null;
+  }
+
+  TranscriptSegment _segmentFromRow(Map<String, Object?> row) {
+    return TranscriptSegment(
+      id: row['id']! as String,
+      text: row['text']! as String,
+      speaker: row['speaker'] as String?,
+      startedAt: Duration(milliseconds: row['started_at_ms']! as int),
+      endedAt: Duration(milliseconds: row['ended_at_ms']! as int),
+      isFinal: (row['is_final'] as int? ?? 1) == 1,
+      confidenceScore: _doubleOrNull(row['confidence_score']),
+      isLowConfidence: (row['is_low_confidence'] as int? ?? 0) == 1,
+    );
+  }
+
+  MeetingType _meetingTypeFromValue(String? value) {
+    return MeetingType.values.firstWhere(
+      (type) => type.value == value,
+      orElse: () => MeetingType.unknown,
+    );
+  }
+
+  DateTime? _dateTimeOrNull(String? value) {
+    return value == null ? null : DateTime.tryParse(value);
+  }
+
+  double? _doubleOrNull(Object? value) {
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    return null;
+  }
+
+  List<String> _stringListFromJson(String? value) {
+    if (value == null || value.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is! List) return const [];
+      return decoded.whereType<String>().toList(growable: false);
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  List<ActionItem> _actionItemsFromJson(String? value) {
+    if (value == null || value.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is! List) return const [];
+      return decoded
+          .whereType<Map>()
+          .map((item) => ActionItem.fromJson(Map<String, dynamic>.from(item)))
+          .where((item) => item.task.trim().isNotEmpty)
+          .toList(growable: false);
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  String _dateText(DateTime date) {
+    return '${date.year.toString().padLeft(4, '0')}'
+        '${date.month.toString().padLeft(2, '0')}'
+        '${date.day.toString().padLeft(2, '0')}';
+  }
+}
